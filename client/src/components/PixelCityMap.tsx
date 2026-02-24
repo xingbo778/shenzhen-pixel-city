@@ -14,7 +14,7 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import type { WorldState } from '@/types/world'
 import { BOT_COLORS, getEmotionColor, getDominantEmotion } from '@/types/world'
 
-// ── Scene background images (v3/v4) ─────────────────────────────────────────
+// -- Scene background images (v3/v4) -----------------------------------------
 const SCENE_IMAGES: Record<string, string> = {
   '宝安城中村':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/fWtEeqJMAogpXcrN.png',
   '南山科技园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/MihADuOxUvykEJgc.png',
@@ -25,13 +25,13 @@ const SCENE_IMAGES: Record<string, string> = {
   '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/NlazuSadnucdCoSQ.png',
 }
 
-// ── Character sprite sheets (v3) ─────────────────────────────────────────────
+// -- Character sprite sheets (v3) ---------------------------------------------
 // chars_sheet1_v3.png: 外卖骑手、程序员、城中村大叔、华强北商人、白领 (rows 0-4)
 // chars_sheet2_v3.png: 创业者、深漂青年、广场舞大妈、保安、跑步者 (rows 0-4)
 const CHARS_SHEET1_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/JmCkfFouADOEIqwG.png'
 const CHARS_SHEET2_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/SxMwWXfCkAgUKHpi.png'
 
-// ── Vehicle spritesheet (v3) ──────────────────────────────────────────────────
+// -- Vehicle spritesheet (v3) --------------------------------------------------
 // vehicles_sheet_v3.png: top-down pixel art vehicles
 // Layout: 8 cols x 6 rows, each cell 64x64
 // Cols 0-3: facing right (frames 0-3), Cols 4-7: facing left (mirrored)
@@ -39,7 +39,7 @@ const CHARS_SHEET2_URL = 'https://files.manuscdn.com/user_upload_by_module/sessi
 // Row 3: taxi (蓝白BYD出租), Row 4: huolala (货拉拉), Row 5: bus (绿色公交)
 const VEHICLE_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/IiYRsyyzNfnvnLXV.png'
 
-// ── Boat spritesheet (v1) ─────────────────────────────────────────────────────
+// -- Boat spritesheet (v1) -----------------------------------------------------
 // boats_sheet_v1.png: top-down pixel art boats for Shenzhen Bay
 // Layout: 4 cols x 3 rows, each cell ~120x80
 // Row 0: fishing_boat (渔船), Row 1: cruise (观光游轮), Row 2: speedboat (快艇)
@@ -52,38 +52,37 @@ const V_ANIM_FRAMES = 4
 const B_CELL_W = Math.round(2752 / 4)  // 688
 const B_CELL_H = Math.round(1536 / 3)  // 512
 
-// ── Precise frame coordinates for vehicles_sheet_v3.png (2752x1536) ─────────
-// 5 rows, each row 307px tall
-const V_ROW_H = 307
+// -- Precise frame coordinates for vehicles_sheet_v3.png (2752x1536) ---------
+// 2 rows x 768px each; each entry has sy (row start), sh (row height = content height)
 // Each entry: [x_start, x_end] for each frame
-const VEHICLE_FRAMES: Record<string, { right: [number,number][], left: [number,number][], rowY: number }> = {
+const VEHICLE_FRAMES: Record<string, { right: [number,number][], left: [number,number][], sy: number, sh: number }> = {
   taxi: {
-    rowY: 0,
+    sy: 17, sh: 751,
     right: [[70,275],[414,619],[762,967],[1107,1312]],
-    left:  [[2145,2344],[2484,2682],[2145,2344],[2484,2682]], // 2-frame loop
+    left:  [[2145,2344],[2484,2682],[2145,2344],[2484,2682]],
   },
   huolala: {
-    rowY: 0,
+    sy: 40, sh: 728,
     right: [[1393,1725]],
     left:  [[1725,2058]],
   },
   meituan: {
-    rowY: 307,
+    sy: 307, sh: 614,
     right: [[1422,1655],[1777,2004],[1422,1655],[1777,2004]],
     left:  [[2156,2333],[2494,2672],[2156,2333],[2494,2672]],
   },
   sweeper: {
-    rowY: 614,
+    sy: 614, sh: 614,
     right: [[41,304],[384,648],[728,991],[1083,1336]],
     left:  [[1424,1691],[1773,2040],[2191,2298],[2530,2637]],
   },
   shared_bike: {
-    rowY: 921,
+    sy: 921, sh: 614,
     right: [[51,292],[396,636],[741,980],[1160,1266]],
     left:  [[1439,1680],[1784,2024],[2190,2298],[2529,2637]],
   },
   bus: {
-    rowY: 1228,
+    sy: 1228, sh: 308,
     right: [[29,1364]],
     left:  [[1794,2023]],
   },
@@ -103,18 +102,18 @@ interface VehicleConfig {
 }
 
 const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
-  shared_bike:  { scale: 0.18, speed: 0.05, frameRate: 8,  zOffset: 0 },
-  meituan:      { scale: 0.20, speed: 0.09, frameRate: 10, zOffset: 0 },
-  sweeper:      { scale: 0.22, speed: 0.04, frameRate: 6,  zOffset: 0 },
-  taxi:         { scale: 0.22, speed: 0.09, frameRate: 8,  zOffset: 0 },
-  huolala:      { scale: 0.18, speed: 0.07, frameRate: 8,  zOffset: 0 },
-  bus:          { scale: 0.16, speed: 0.05, frameRate: 6,  zOffset: 0 },
+  shared_bike:  { scale: 0.10, speed: 0.05, frameRate: 8,  zOffset: 0 },  // sh=614 -> ~62px
+  meituan:      { scale: 0.11, speed: 0.09, frameRate: 10, zOffset: 0 },  // sh=614 -> ~68px
+  sweeper:      { scale: 0.13, speed: 0.04, frameRate: 6,  zOffset: 0 },  // sh=614 -> ~80px
+  taxi:         { scale: 0.12, speed: 0.09, frameRate: 8,  zOffset: 0 },  // sh=751 -> ~90px
+  huolala:      { scale: 0.15, speed: 0.07, frameRate: 8,  zOffset: 0 },  // sh=728 -> ~109px
+  bus:          { scale: 0.32, speed: 0.05, frameRate: 6,  zOffset: 0 },  // sh=308 -> ~99px
   fishing_boat: { scale: 0.10, speed: 0.025, frameRate: 4, zOffset: 0, isBoat: true, boatRow: 0, cellW: B_CELL_W, cellH: B_CELL_H },
   cruise:       { scale: 0.12, speed: 0.035, frameRate: 4, zOffset: 0, isBoat: true, boatRow: 1, cellW: B_CELL_W, cellH: B_CELL_H },
   speedboat:    { scale: 0.08, speed: 0.055, frameRate: 6, zOffset: 0, isBoat: true, boatRow: 2, cellW: B_CELL_W, cellH: B_CELL_H },
 }
 
-// ── Vehicle road lanes per scene ──────────────────────────────────────────
+// -- Vehicle road lanes per scene ------------------------------------------
 interface VehicleLane {
   type: VehicleType
   y: number       // normalized y position of lane center
@@ -191,7 +190,7 @@ const SCENE_VEHICLE_LANES: Record<string, VehicleLane[]> = {
   ],
 }
 
-// ── Vehicle instance state ────────────────────────────────────────────────
+// -- Vehicle instance state ------------------------------------------------
 interface VehicleState {
   id: string
   type: VehicleType
@@ -201,7 +200,7 @@ interface VehicleState {
   dir: 1 | -1
   frame: number
   frameTimer: number
-}// ── Character spritesheet configuration ───────────────────────────────────────────
+}// -- Character spritesheet configuration -------------------------------------------
 // v3 sheets: precise frame coordinates extracted from actual sprite images
 // chars_sheet1_v3.png: 2752x1536, 3 rows x 512px each
 // chars_sheet2_v3.png: 2752x1536, 4 rows x 384px each
@@ -209,18 +208,18 @@ interface VehicleState {
 // Precise frame x-coordinates for each character row
 // Format: [[x0,x1], [x0,x1], ...] for each animation frame
 const CHAR_FRAME_COORDS: Record<string, { sheet: 1|2; rowY: number; rowH: number; frames: [number,number][] }> = {
-  // chars_sheet1_v3.png rows (row height = 512px)
-  '外卖骑手': { sheet: 1, rowY: 0,    rowH: 512, frames: [[68,270],[426,619],[734,957],[1102,1324],[68,270],[426,619]] },
-  '程序员':   { sheet: 1, rowY: 0,    rowH: 512, frames: [[1457,1645],[1806,1989],[2133,2331],[2483,2676],[1457,1645],[1806,1989]] },
-  '城中村大叔': { sheet: 1, rowY: 512,  rowH: 512, frames: [[52,309],[420,607],[753,955],[1097,1294],[52,309],[420,607]] },
-  '华强北商人': { sheet: 1, rowY: 512,  rowH: 512, frames: [[1414,1678],[1754,2018],[2121,2350],[2472,2677],[1414,1678],[1754,2018]] },
-  '白领':     { sheet: 1, rowY: 1024, rowH: 512, frames: [[75,268],[431,607],[757,950],[1095,1295],[75,268],[431,607]] },
-  // chars_sheet2_v3.png rows (row height = 384px)
-  '创业者':   { sheet: 2, rowY: 0,    rowH: 384, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
-  '深漂青年': { sheet: 2, rowY: 384,  rowH: 384, frames: [[70,206],[344,482],[592,762],[866,1036],[1158,1329],[1439,1582]] },
-  '广场舞大妈': { sheet: 2, rowY: 768,  rowH: 384, frames: [[61,210],[336,486],[623,762],[892,1037],[1156,1298],[1441,1580]] },
-  '保安':     { sheet: 2, rowY: 1152, rowH: 384, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
-  '跑步者':   { sheet: 1, rowY: 1024, rowH: 512, frames: [[1450,1634],[1806,1978],[2133,2321],[2478,2654],[1450,1634],[1806,1978]] },
+  // chars_sheet1_v3.png: rowH = actual content height (424px), not grid height (512px)
+  '外卖骑手': { sheet: 1, rowY: 41,   rowH: 424, frames: [[68,270],[426,619],[734,957],[1102,1324],[68,270],[426,619]] },
+  '程序员':   { sheet: 1, rowY: 41,   rowH: 424, frames: [[1457,1645],[1806,1989],[2133,2331],[2483,2676],[1457,1645],[1806,1989]] },
+  '城中村大叔': { sheet: 1, rowY: 567, rowH: 419, frames: [[52,309],[420,607],[753,955],[1097,1294],[52,309],[420,607]] },
+  '华强北商人': { sheet: 1, rowY: 567, rowH: 419, frames: [[1414,1678],[1754,2018],[2121,2350],[2472,2677],[1414,1678],[1754,2018]] },
+  '白领':     { sheet: 1, rowY: 1083, rowH: 425, frames: [[75,268],[431,607],[757,950],[1095,1295],[75,268],[431,607]] },
+  // chars_sheet2_v3.png: rowH = actual content height (~344-371px)
+  '创业者':   { sheet: 2, rowY: 17,   rowH: 344, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
+  '深漂青年': { sheet: 2, rowY: 401,  rowH: 344, frames: [[70,206],[344,482],[592,762],[866,1036],[1158,1329],[1439,1582]] },
+  '广场舞大妈': { sheet: 2, rowY: 796, rowH: 356, frames: [[61,210],[336,486],[623,762],[892,1037],[1156,1298],[1441,1580]] },
+  '保安':     { sheet: 2, rowY: 1152, rowH: 371, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
+  '跑步者':   { sheet: 1, rowY: 1083, rowH: 425, frames: [[1450,1634],[1806,1978],[2133,2321],[2478,2654],[1450,1634],[1806,1978]] },
 }
 
 interface SpriteConfig {
@@ -232,35 +231,37 @@ interface SpriteConfig {
 }
 
 // Legacy configs (kept for fallback, but rendering now uses CHAR_FRAME_COORDS)
+// scale calibrated so all chars render at ~120px tall:
+//   sheet1 rowH~424px -> scale=0.283; sheet2 rowH~360px -> scale=0.333
 const SPRITE_CONFIGS: Record<string, SpriteConfig> = {
-  '外卖骑手':   { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.85 },
-  '程序员':     { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '城中村大叔': { sheet: 1, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '华强北商人': { sheet: 1, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '白领':       { sheet: 1, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '创业者':     { sheet: 2, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '深漂青年':   { sheet: 2, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '广场舞大妈': { sheet: 2, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '保安':       { sheet: 2, row: 3, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  '跑步者':     { sheet: 1, row: 2, frameCount: 6, scale: 0.60, offsetY: 0.90 },
+  '外卖骑手':   { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.85 },
+  '程序员':     { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  '城中村大叔': { sheet: 1, row: 1, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  '华强北商人': { sheet: 1, row: 1, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  '白领':       { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  '创业者':     { sheet: 2, row: 0, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  '深漂青年':   { sheet: 2, row: 1, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  '广场舞大妈': { sheet: 2, row: 2, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  '保安':       { sheet: 2, row: 3, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  '跑步者':     { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
 }
 
 const FALLBACK_OCCUPATIONS = ['创业者', '白领', '深漂青年', '程序员', '保安', '华强北商人', '广场舞大妈', '城中村大叔', '跑步者', '外卖骑手']
 
 const FALLBACK_CONFIGS: SpriteConfig[] = [
-  { sheet: 2, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 3, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 2, frameCount: 6, scale: 0.60, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.85 },
+  { sheet: 2, row: 0, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  { sheet: 2, row: 1, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  { sheet: 2, row: 3, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  { sheet: 1, row: 1, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  { sheet: 2, row: 2, frameCount: 6, scale: 0.333, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.85 },
 ]
 
-// ── Walkable zones per scene ──────────────────────────────────────────────
+// -- Walkable zones per scene ----------------------------------------------
 const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
   '宝安城中村': [
     [0.15, 0.22, 0.70, 0.26],
@@ -294,14 +295,20 @@ const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
     [0.08, 0.70, 0.84, 0.14],
   ],
   '深圳湾公园': [
-    [0.02, 0.02, 0.40, 0.24],
-    [0.44, 0.28, 0.54, 0.20],
-    [0.02, 0.28, 0.88, 0.10],
-    [0.02, 0.40, 0.60, 0.12],
+    // 上方绿草地（左侧）
+    [0.02, 0.02, 0.38, 0.22],
+    // 上方滨海步道（右侧）
+    [0.46, 0.02, 0.52, 0.22],
+    // 自行车道/道路（横向）
+    [0.02, 0.22, 0.96, 0.08],
+    // 木质健身区/栈道（y 0.30~0.42，不超过水面）
+    [0.02, 0.30, 0.88, 0.10],
+    // 右侧草地（y 0.28~0.42）
+    [0.56, 0.28, 0.42, 0.14],
   ],
 }
 
-// ── Scene metadata ────────────────────────────────────────────────────────
+// -- Scene metadata --------------------------------------------------------
 const SCENE_META: Record<string, { ambientColor: string; name: string }> = {
   '宝安城中村':  { ambientColor: '#C4956A', name: '宝安城中村' },
   '南山科技园':  { ambientColor: '#4D96FF', name: '南山科技园' },
@@ -314,12 +321,12 @@ const SCENE_META: Record<string, { ambientColor: string; name: string }> = {
 
 const SCENE_NAMES = Object.keys(SCENE_META)
 
-// ── Character constants ───────────────────────────────────────────────────
+// -- Character constants ---------------------------------------------------
 const CHAR_WALK_SPEED = 0.8
 const WALK_FRAME_DURATION = 0.12
 const WANDER_INTERVAL = 3.5
 
-// ── Large map constants ───────────────────────────────────────────────────
+// -- Large map constants ---------------------------------------------------
 const MAP_SCALE = 2.0
 
 type Direction = 'left' | 'right' | 'down' | 'up'
@@ -356,7 +363,7 @@ interface Props {
   currentLocation?: string
 }
 
-// ── Image cache ───────────────────────────────────────────────────────────
+// -- Image cache -----------------------------------------------------------
 const imageCache: Record<string, HTMLImageElement | null> = {}
 const imageLoaded: Record<string, boolean> = {}
 
@@ -372,7 +379,7 @@ function preloadImage(url: string): HTMLImageElement {
   return imageCache[url]!
 }
 
-// ── Random point in walk zones ────────────────────────────────────────────
+// -- Random point in walk zones --------------------------------------------
 function getRandomWalkPoint(location: string): { x: number; y: number } {
   const zones = SCENE_WALK_ZONES[location] || [[0.1, 0.3, 0.8, 0.5]]
   const zone = zones[Math.floor(Math.random() * zones.length)]
@@ -392,13 +399,13 @@ function getInitialWalkPoint(location: string, index: number, total: number): { 
   }
 }
 
-// ── Get sprite config for a bot ───────────────────────────────────────────
+// -- Get sprite config for a bot -------------------------------------------
 function getSpriteConfig(occupation: string | undefined, paletteIndex: number): SpriteConfig {
   if (occupation && SPRITE_CONFIGS[occupation]) return SPRITE_CONFIGS[occupation]
   return FALLBACK_CONFIGS[paletteIndex % FALLBACK_CONFIGS.length]
 }
 
-// ── Initialize vehicles for a scene ──────────────────────────────────────
+// -- Initialize vehicles for a scene --------------------------------------
 function initVehicles(location: string, botCount: number): VehicleState[] {
   const lanes = SCENE_VEHICLE_LANES[location] || []
   const vehicles: VehicleState[] = []
@@ -427,7 +434,7 @@ function initVehicles(location: string, botCount: number): VehicleState[] {
   return vehicles
 }
 
-// ── Draw vehicle from spritesheet ─────────────────────────────────────────
+// -- Draw vehicle from spritesheet -----------------------------------------
 function drawVehicle(
   ctx: CanvasRenderingContext2D,
   v: VehicleState,
@@ -476,8 +483,8 @@ function drawVehicle(
     const frameIdx = v.frame % dirFrames.length
     const [x0, x1] = dirFrames[frameIdx]
     const sw = x1 - x0
-    const sh = V_ROW_H
-    const sy = vFrames.rowY
+    const sh = vFrames.sh
+    const sy = vFrames.sy
     
     // Scale: render height = sh * scale, keep aspect ratio
     const renderH = Math.round(sh * config.scale)
@@ -623,11 +630,11 @@ export default function PixelCityMap({
     ctx.save()
     ctx.scale(dpr, dpr)
 
-    // ── Background ────────────────────────────────────────────────────
+    // -- Background ----------------------------------------------------
     ctx.fillStyle = '#0d1117'
     ctx.fillRect(0, 0, cssW, cssH)
 
-    // ── Large map: background image scaled to MAP_SCALE, pan offset ───
+    // -- Large map: background image scaled to MAP_SCALE, pan offset ---
     const bgUrl = SCENE_IMAGES[activeLocation]
     const bgImg = bgUrl ? preloadImage(bgUrl) : null
 
@@ -665,7 +672,7 @@ export default function PixelCityMap({
       ctx.imageSmoothingQuality = 'high'
       ctx.drawImage(bgImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH)
 
-      // ── Procedural ground extension ───────────────────────────────────
+      // -- Procedural ground extension -----------------------------------
       const tileColor = meta.ambientColor + '18'
       ctx.fillStyle = tileColor
       if (imgDrawX > 0) ctx.fillRect(0, 0, imgDrawX, cssH)
@@ -684,11 +691,11 @@ export default function PixelCityMap({
       ctx.fillText('加载场景图中...', cssW / 2, cssH / 2 + 40)
     }
 
-    // ── Z-sort drawable list ──────────────────────────────────────────
+    // -- Z-sort drawable list ------------------------------------------
     interface ZDrawable { zY: number; draw: (c: CanvasRenderingContext2D) => void }
     const drawables: ZDrawable[] = []
 
-    // ── Update & draw vehicles ────────────────────────────────────────
+    // -- Update & draw vehicles ----------------------------------------
     vehiclesRef.current.forEach(v => {
       const config = VEHICLE_CONFIGS[v.type]
       
@@ -740,7 +747,7 @@ export default function PixelCityMap({
       })
     })
 
-    // ── Bot characters ────────────────────────────────────────────────
+    // -- Bot characters ------------------------------------------------
     Object.entries(botStatesRef.current).forEach(([botId, bs]) => {
       bs.frameTimer += dt
 
@@ -981,7 +988,7 @@ export default function PixelCityMap({
       })
     })
 
-    // ── Emotion bubbles ───────────────────────────────────────────────
+    // -- Emotion bubbles -----------------------------------------------
     bubblesRef.current = bubblesRef.current.filter(b => b.timer > 0)
     bubblesRef.current.forEach(bubble => {
       bubble.timer -= dt
@@ -1021,11 +1028,11 @@ export default function PixelCityMap({
       })
     })
 
-    // ── Z-sort and draw ───────────────────────────────────────────────
+    // -- Z-sort and draw -----------------------------------------------
     drawables.sort((a, b) => a.zY - b.zY)
     drawables.forEach(d => d.draw(ctx))
 
-    // ── Pan indicator ─────────────────────────────────────────────────
+    // -- Pan indicator -------------------------------------------------
     if (Math.abs(panX) > 10 || Math.abs(panY) > 10) {
       ctx.save()
       ctx.globalAlpha = 0.5
@@ -1041,7 +1048,7 @@ export default function PixelCityMap({
       ctx.restore()
     }
 
-    // ── Vignette ─────────────────────────────────────────────────────
+    // -- Vignette -----------------------------------------------------
     const vignette = ctx.createRadialGradient(cssW/2, cssH/2, cssH*0.3, cssW/2, cssH/2, cssH*0.8)
     vignette.addColorStop(0, 'transparent')
     vignette.addColorStop(1, 'rgba(0,0,0,0.2)')
