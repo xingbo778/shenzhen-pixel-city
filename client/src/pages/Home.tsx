@@ -22,6 +22,7 @@ export default function Home() {
   const { world, moments, isConnected, isLoading, lastUpdated, error } = useWorldData(3000);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const [currentMapLocation, setCurrentMapLocation] = useState<string>('宝安城中村');
   const [showBotDetail, setShowBotDetail] = useState(false);
 
   const handleBotClick = useCallback((botId: string) => {
@@ -31,6 +32,7 @@ export default function Home() {
 
   const handleLocationClick = useCallback((location: string) => {
     setSelectedLocation(location);
+    setCurrentMapLocation(location);
     setShowBotDetail(false);
   }, []);
 
@@ -115,6 +117,7 @@ export default function Home() {
             selectedBotId={selectedBotId}
             onBotClick={handleBotClick}
             onLocationClick={handleLocationClick}
+            currentLocation={currentMapLocation}
           />
         </div>
 

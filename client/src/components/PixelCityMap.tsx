@@ -1,442 +1,574 @@
 /**
- * PixelCityMap - 像素深圳城市地图
- * 设计哲学：城市运营中心（NOC Dashboard）
- * - 深色底板，霓虹发光地点标记
- * - Bot 用彩色像素头像在地图上实时移动
- * - 复用 pixel-agents 的 Canvas 渲染思路（分层绘制、Z轴排序、平滑插值）
+ * PixelCityMap - 深圳像素城市地图
+ * 深度复用 pixel-agents 渲染系统：
+ * - getCachedSprite: SpriteData → HTMLCanvasElement (像素放大)
+ * - 16x24 点阵角色，4方向行走动画，4帧循环
+ * - Z轴 Y排序（pixel-agents renderer.ts 的 zY 排序）
+ * - 情绪气泡 (pixel-agents BUBBLE_PERMISSION_SPRITE 风格)
+ * - 场景切换：7个深圳地点，各有独立建筑和地面
  */
 
-import { useRef, useEffect, useCallback, useState } from "react";
-import type { WorldState, BotState } from "@/types/world";
-import { LOCATION_MAP_CONFIG, BOT_COLORS, getEmotionColor } from "@/types/world";
+import { useRef, useEffect, useCallback, useState } from 'react'
+import type { WorldState } from '@/types/world'
+import { BOT_COLORS, getEmotionColor, getDominantEmotion } from '@/types/world'
+import {
+  getCachedSprite, getOutlineSprite, getCharacterSprites, getFrameSprite,
+  type SpriteData, type Direction, type CharState
+} from '@/engine/spriteSystem'
+import { SCENE_CONFIGS } from '@/engine/sceneTiles'
 
-interface BotPosition {
-  x: number;
-  y: number;
-  targetX: number;
-  targetY: number;
+const TILE_SIZE = 16   // pixels per tile (logical)
+const ZOOM = 3         // pixel scale factor (like pixel-agents zoom)
+const CHAR_ZOOM = 4    // character sprite zoom (larger than tiles for visibility)
+const CHAR_WALK_SPEED = 0.08  // tiles per frame (smoother)
+const WALK_FRAME_DURATION = 0.15  // seconds per walk frame
+const WANDER_INTERVAL = 3.5  // seconds between wander target updates
+
+interface BotRenderState {
+  x: number; y: number        // current pixel pos (logical)
+  targetX: number; targetY: number
+  tileCol: number; tileRow: number
+  dir: Direction
+  state: CharState
+  frame: number
+  frameTimer: number
+  paletteIndex: number
+  wanderTimer: number
+}
+
+interface EmotionBubble {
+  botId: string
+  emoji: string
+  x: number; y: number
+  alpha: number
+  timer: number
 }
 
 interface Props {
-  world: WorldState | null;
-  selectedBotId: string | null;
-  onBotClick: (botId: string) => void;
-  onLocationClick: (location: string) => void;
+  world: WorldState | null
+  selectedBotId: string | null
+  onBotClick: (botId: string) => void
+  onLocationClick: (location: string) => void
+  currentLocation?: string
 }
 
-// 像素字体渲染（模拟 pixel-agents 的 sprite 系统）
-function drawPixelText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  color: string,
-  size = 10
-) {
-  ctx.font = `${size}px 'JetBrains Mono', monospace`;
-  ctx.fillStyle = color;
-  ctx.textAlign = "center";
-  ctx.fillText(text, x, y);
+// ── Emotion Bubble Sprite (pixel-agents BUBBLE style) ────────────
+function createEmotionBubble(emoji: string): SpriteData {
+  const B = '#555566', F = '#EEEEFF'
+  return [
+    [B,B,B,B,B,B,B,B,B,B,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,F,F,F,F,F,F,F,F,F,B],
+    [B,B,B,B,B,B,B,B,B,B,B],
+    [_,_,_,_,B,B,B,_,_,_,_],
+    [_,_,_,_,_,B,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_],
+  ]
 }
+const _ = ''
+const BUBBLE_SPRITE = createEmotionBubble('')
 
-// 绘制发光圆圈（地点标记）
-function drawGlowCircle(
+// ── Floor rendering ───────────────────────────────────────────────
+function drawFloor(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, r: number, color: string, alpha = 0.8
+  cols: number, rows: number,
+  floorColor: string,
+  pattern: 'solid' | 'grid' | 'checker',
+  offsetX: number, offsetY: number,
+  zoom: number
 ) {
-  // 外发光
-  const gradient = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2);
-  gradient.addColorStop(0, color + "66");
-  gradient.addColorStop(1, "transparent");
-  ctx.beginPath();
-  ctx.arc(x, y, r * 2, 0, Math.PI * 2);
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  // 主圆
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = alpha;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-}
-
-// 绘制 Bot 像素头像（8x8 像素点阵风格）
-function drawBotAvatar(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number,
-  color: string,
-  name: string,
-  isSleeping: boolean,
-  isSelected: boolean,
-  emotionColor: string,
-  size = 14
-) {
-  // 选中高亮
-  if (isSelected) {
-    ctx.beginPath();
-    ctx.arc(x, y, size + 4, 0, Math.PI * 2);
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // 情绪光晕
-  const glowGrad = ctx.createRadialGradient(x, y, size * 0.5, x, y, size * 1.8);
-  glowGrad.addColorStop(0, emotionColor + "44");
-  glowGrad.addColorStop(1, "transparent");
-  ctx.beginPath();
-  ctx.arc(x, y, size * 1.8, 0, Math.PI * 2);
-  ctx.fillStyle = glowGrad;
-  ctx.fill();
-
-  // 头像背景
-  ctx.beginPath();
-  ctx.arc(x, y, size, 0, Math.PI * 2);
-  ctx.fillStyle = "#0d1a2e";
-  ctx.fill();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = isSleeping ? 1 : 2;
-  ctx.globalAlpha = isSleeping ? 0.6 : 1;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
-  // 像素人形（简化的 8x8 风格）
-  const s = size * 0.35;
-  // 头部
-  ctx.fillStyle = color;
-  ctx.fillRect(x - s * 0.7, y - s * 1.8, s * 1.4, s * 1.2);
-  // 身体
-  ctx.fillRect(x - s * 0.9, y - s * 0.6, s * 1.8, s * 1.2);
-  // 腿
-  ctx.fillRect(x - s * 0.8, y + s * 0.6, s * 0.7, s * 0.8);
-  ctx.fillRect(x + s * 0.1, y + s * 0.6, s * 0.7, s * 0.8);
-
-  // 名字标签
-  ctx.font = "9px 'Noto Sans SC', sans-serif";
-  ctx.fillStyle = color;
-  ctx.textAlign = "center";
-  ctx.globalAlpha = 0.9;
-  ctx.fillText(name.slice(0, 3), x, y + size + 12);
-  ctx.globalAlpha = 1;
-
-  // 睡觉 zzz
-  if (isSleeping) {
-    ctx.font = "10px sans-serif";
-    ctx.fillText("💤", x + size * 0.8, y - size * 0.8);
+  const s = TILE_SIZE * zoom
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let color = floorColor
+      if (pattern === 'checker' && (r + c) % 2 === 1) {
+        // slightly lighter alternate tile
+        color = lightenHex(floorColor, 15)
+      }
+      ctx.fillStyle = color
+      ctx.fillRect(offsetX + c * s, offsetY + r * s, s, s)
+      if (pattern === 'grid') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)'
+        ctx.lineWidth = 1
+        ctx.strokeRect(offsetX + c * s + 0.5, offsetY + r * s + 0.5, s - 1, s - 1)
+      }
+    }
   }
 }
 
-// 绘制道路网络（深圳简化路网）
-function drawRoads(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.strokeStyle = "rgba(77, 150, 255, 0.12)";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([4, 8]);
-
-  // 横向主干道
-  const roads = [
-    // 连接宝安-南山科技园-福田CBD
-    [[0.05, 0.35], [0.32, 0.28], [0.62, 0.22], [0.85, 0.20]],
-    // 连接南山公寓-华强北-东门老街
-    [[0.22, 0.68], [0.52, 0.48], [0.72, 0.58], [0.90, 0.62]],
-    // 连接深圳湾公园-南山科技园
-    [[0.38, 0.82], [0.32, 0.28]],
-    // 纵向：宝安-南山公寓-深圳湾
-    [[0.15, 0.52], [0.22, 0.68], [0.38, 0.82]],
-    // 纵向：华强北-福田CBD
-    [[0.52, 0.48], [0.62, 0.22]],
-    // 纵向：东门-华强北
-    [[0.72, 0.58], [0.52, 0.48]],
-  ];
-
-  for (const road of roads) {
-    ctx.beginPath();
-    road.forEach(([rx, ry], i) => {
-      const px = rx * w, py = ry * h;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    });
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
+function lightenHex(hex: string, amount: number): string {
+  const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount)
+  const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount)
+  const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount)
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
 }
 
-// 绘制地点连线（当有 Bot 在两地之间移动时）
-function drawConnectionLine(
-  ctx: CanvasRenderingContext2D,
-  x1: number, y1: number, x2: number, y2: number, color: string
-) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.strokeStyle = color + "40";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 4]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+// ── Bot tile assignment (spread bots across walkable tiles) ───────
+const BOT_TILE_OFFSETS = [
+  { col: 3, row: 9 }, { col: 7, row: 10 }, { col: 11, row: 9 }, { col: 15, row: 10 },
+  { col: 5, row: 11 }, { col: 9, row: 12 }, { col: 13, row: 11 }, { col: 17, row: 12 },
+  { col: 2, row: 13 }, { col: 6, row: 13 }, { col: 10, row: 13 }, { col: 14, row: 13 },
+]
+
+function assignBotTiles(
+  botIds: string[], cols: number, rows: number
+): Record<string, { col: number; row: number }> {
+  const result: Record<string, { col: number; row: number }> = {}
+  botIds.forEach((id, i) => {
+    const offset = BOT_TILE_OFFSETS[i % BOT_TILE_OFFSETS.length]
+    const col = Math.min(cols - 2, offset.col)
+    const row = Math.min(rows - 1, offset.row)
+    result[id] = { col, row }
+  })
+  return result
 }
 
-export default function PixelCityMap({ world, selectedBotId, onBotClick, onLocationClick }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const botPositionsRef = useRef<Record<string, BotPosition>>({});
-  const animFrameRef = useRef<number>(0);
-  const [hoveredBot, setHoveredBot] = useState<string | null>(null);
-  const [hoveredLoc, setHoveredLoc] = useState<string | null>(null);
-  const pulseRef = useRef(0);
+export default function PixelCityMap({
+  world, selectedBotId, onBotClick, onLocationClick, currentLocation
+}: Props) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const botStatesRef = useRef<Record<string, BotRenderState>>({})
+  const bubblesRef = useRef<EmotionBubble[]>([])
+  const animFrameRef = useRef<number>(0)
+  const lastTimeRef = useRef<number>(0)
+  const pulseRef = useRef(0)
+  const [hoveredBotId, setHoveredBotId] = useState<string | null>(null)
 
-  // 更新 Bot 目标位置（当 world 数据变化时）
+  // Active scene
+  const activeLocation = currentLocation || Object.keys(SCENE_CONFIGS)[0]
+  const scene = SCENE_CONFIGS[activeLocation] || SCENE_CONFIGS['南山科技园']
+
+  // Update bot target positions when world changes
   useEffect(() => {
-    if (!world || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const w = canvas.width, h = canvas.height;
+    if (!world) return
+    // Show ALL bots on the map (not filtered by location)
+    // Bots at current location wander freely; others are shown as visitors
+    const allBotIds = Object.keys(world.bots).filter(id => world.bots[id].status === 'alive')
+    const assignments = assignBotTiles(allBotIds, scene.cols, scene.rows)
 
-    Object.entries(world.bots).forEach(([botId, bot]) => {
-      const locConfig = LOCATION_MAP_CONFIG[bot.location];
-      if (!locConfig) return;
+    allBotIds.forEach((botId, i) => {
+      const bot = world.bots[botId]
+      if (!bot) return
+      const assign = assignments[botId]
 
-      // 在地点周围随机散布，避免重叠
-      const botsAtLoc = world.locations[bot.location]?.bots || [];
-      const idx = botsAtLoc.indexOf(botId);
-      const total = botsAtLoc.length;
-      const angle = (idx / Math.max(total, 1)) * Math.PI * 2;
-      const spread = Math.min(total * 6, 30);
-      const tx = (locConfig.x / 100) * w + Math.cos(angle) * spread;
-      const ty = (locConfig.y / 100) * h + Math.sin(angle) * spread;
+      // Bots at current location get random wander targets
+      const isHere = bot.location === activeLocation
+      const wanderCol = isHere
+        ? 2 + Math.floor(Math.random() * (scene.cols - 4))
+        : assign.col
+      const wanderRow = isHere
+        ? Math.floor(scene.rows * 0.55) + Math.floor(Math.random() * Math.floor(scene.rows * 0.4))
+        : assign.row
 
-      if (!botPositionsRef.current[botId]) {
-        botPositionsRef.current[botId] = { x: tx, y: ty, targetX: tx, targetY: ty };
+      const tx = wanderCol * TILE_SIZE + TILE_SIZE / 2
+      const ty = wanderRow * TILE_SIZE + TILE_SIZE / 2
+
+      if (!botStatesRef.current[botId]) {
+        // Initial position: start at assigned tile
+        const sx = assign.col * TILE_SIZE + TILE_SIZE / 2
+        const sy = assign.row * TILE_SIZE + TILE_SIZE / 2
+        botStatesRef.current[botId] = {
+          x: sx, y: sy, targetX: tx, targetY: ty,
+          tileCol: assign.col, tileRow: assign.row,
+          dir: 'down',
+          state: bot.is_sleeping ? 'sleep' : (isHere ? 'walk' : 'idle'),
+          frame: 0, frameTimer: 0,
+          paletteIndex: i % 10,
+          wanderTimer: Math.random() * WANDER_INTERVAL,  // stagger initial wander
+        }
       } else {
-        botPositionsRef.current[botId].targetX = tx;
-        botPositionsRef.current[botId].targetY = ty;
+        const bs = botStatesRef.current[botId]
+        // Periodically give bots at current location new wander targets
+        if (isHere && Math.abs(bs.x - bs.targetX) < 2 && Math.abs(bs.y - bs.targetY) < 2) {
+          const newCol = 2 + Math.floor(Math.random() * (scene.cols - 4))
+          const newRow = Math.floor(scene.rows * 0.55) + Math.floor(Math.random() * Math.floor(scene.rows * 0.4))
+          bs.targetX = newCol * TILE_SIZE + TILE_SIZE / 2
+          bs.targetY = newRow * TILE_SIZE + TILE_SIZE / 2
+          bs.state = bot.is_sleeping ? 'sleep' : 'walk'
+        } else if (!isHere) {
+          bs.state = bot.is_sleeping ? 'sleep' : 'idle'
+        }
       }
-    });
-  }, [world]);
 
-  // 主渲染循环（复用 pixel-agents 的 gameLoop 思路）
-  const render = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.width / dpr, h = canvas.height / dpr;
-    pulseRef.current = (pulseRef.current + 0.03) % (Math.PI * 2);
-    const pulse = Math.sin(pulseRef.current);
-
-    // 清空画布，应用 DPR 缩放变换
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    // 背景：深色渐变
-    const bgGrad = ctx.createLinearGradient(0, 0, w, h);
-    bgGrad.addColorStop(0, "#060b14");
-    bgGrad.addColorStop(1, "#0a1428");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
-
-    // 网格线（科技感底纹）
-    ctx.strokeStyle = "rgba(77, 150, 255, 0.04)";
-    ctx.lineWidth = 1;
-    const gridSize = 40;
-    for (let x = 0; x < w; x += gridSize) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    for (let y = 0; y < h; y += gridSize) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
-
-    if (!world) {
-      // 离线状态
-      ctx.font = "14px 'Orbitron', sans-serif";
-      ctx.fillStyle = "rgba(77, 150, 255, 0.4)";
-      ctx.textAlign = "center";
-      ctx.fillText("等待连接 world_engine...", w / 2, h / 2);
-      animFrameRef.current = requestAnimationFrame(render);
-      return;
-    }
-
-    // 绘制道路
-    drawRoads(ctx, w, h);
-
-    // 绘制地点标记
-    Object.entries(LOCATION_MAP_CONFIG).forEach(([locName, cfg]) => {
-      const x = (cfg.x / 100) * w;
-      const y = (cfg.y / 100) * h;
-      const botsHere = world.locations[locName]?.bots?.length || 0;
-      const isHovered = hoveredLoc === locName;
-
-      // 地点发光圆
-      const r = 18 + (isHovered ? 4 : 0);
-      drawGlowCircle(ctx, x, y, r, cfg.color, 0.6 + pulse * 0.2);
-
-      // 地点图标
-      ctx.font = `${isHovered ? 20 : 18}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.fillText(cfg.icon, x, y + 6);
-
-      // 地点名称
-      ctx.font = "10px 'Noto Sans SC', sans-serif";
-      ctx.fillStyle = cfg.color;
-      ctx.globalAlpha = 0.9;
-      ctx.fillText(cfg.label, x, y + r + 14);
-      ctx.globalAlpha = 1;
-
-      // Bot 数量徽章
-      if (botsHere > 0) {
-        ctx.beginPath();
-        ctx.arc(x + r * 0.7, y - r * 0.7, 8, 0, Math.PI * 2);
-        ctx.fillStyle = "#ff6b6b";
-        ctx.fill();
-        ctx.font = "bold 9px 'JetBrains Mono', monospace";
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-        ctx.fillText(String(botsHere), x + r * 0.7, y - r * 0.7 + 3);
+      // Spawn emotion bubble occasionally
+      if (Math.random() < 0.008) {
+        const emotion = getDominantEmotion(bot.emotions)
+        const bs = botStatesRef.current[botId]
+        if (bs) {
+          bubblesRef.current.push({
+            botId,
+            emoji: emotion.emoji,
+            x: bs.x, y: bs.y,
+            alpha: 1,
+            timer: 2.5,
+          })
+        }
       }
-    });
+    })
 
-    // 平滑插值 Bot 位置（lerp，复用 pixel-agents characters.ts 的移动逻辑）
-    const lerpFactor = 0.08;
-    Object.entries(botPositionsRef.current).forEach(([, pos]) => {
-      pos.x += (pos.targetX - pos.x) * lerpFactor;
-      pos.y += (pos.targetY - pos.y) * lerpFactor;
-    });
+    // Remove dead bots
+    Object.keys(botStatesRef.current).forEach(id => {
+      if (!allBotIds.includes(id)) delete botStatesRef.current[id]
+    })
+  }, [world, activeLocation, scene.cols, scene.rows])
 
-    // 绘制 Bot（按 Y 轴排序，实现 Z 轴深度感，复用 pixel-agents renderer.ts 的 zY 排序）
-    const aliveBots = Object.entries(world.bots)
-      .filter(([, b]) => b.status === "alive")
-      .sort(([idA, bA], [idB, bB]) => {
-        const posA = botPositionsRef.current[idA];
-        const posB = botPositionsRef.current[idB];
-        return (posA?.y || 0) - (posB?.y || 0);
-      });
+  // Main render loop (pixel-agents gameLoop style)
+  const render = useCallback((timestamp: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
-    aliveBots.forEach(([botId, bot]) => {
-      const pos = botPositionsRef.current[botId];
-      if (!pos) return;
+    const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
+    lastTimeRef.current = timestamp
+    pulseRef.current = (pulseRef.current + dt * 1.5) % (Math.PI * 2)
 
-      const color = BOT_COLORS[botId] || "#4d96ff";
-      const emotionColor = getEmotionColor(bot.emotions);
-      const isSelected = selectedBotId === botId;
-      const isHovered = hoveredBot === botId;
+    const dpr = window.devicePixelRatio || 1
+    const cssW = canvas.width / dpr
+    const cssH = canvas.height / dpr
 
-      drawBotAvatar(
-        ctx, pos.x, pos.y,
-        color,
-        bot.name,
-        bot.is_sleeping,
-        isSelected || isHovered,
-        emotionColor,
-        isHovered ? 16 : 14
-      );
-    });
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.save()
+    ctx.scale(dpr, dpr)
 
-    // 扫描线叠加（科技感）
-    ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
-    for (let y = 0; y < h; y += 3) {
-      ctx.fillRect(0, y, w, 1);
+    // ── Background ──────────────────────────────────────────────
+    ctx.fillStyle = '#060b14'
+    ctx.fillRect(0, 0, cssW, cssH)
+
+    // ── Scene offset: center the tile grid ──────────────────────
+    const sceneW = scene.cols * TILE_SIZE * ZOOM
+    const sceneH = scene.rows * TILE_SIZE * ZOOM
+    const offsetX = Math.floor((cssW - sceneW) / 2)
+    const offsetY = Math.floor((cssH - sceneH) / 2)
+
+    // ── Floor tiles (pixel-agents renderTileGrid style) ─────────
+    drawFloor(ctx, scene.cols, scene.rows, scene.floorColor, scene.floorPattern, offsetX, offsetY, ZOOM)
+
+    // ── Ambient light overlay ───────────────────────────────────
+    const pulse = Math.sin(pulseRef.current)
+    const ambientGrad = ctx.createRadialGradient(
+      offsetX + sceneW / 2, offsetY + sceneH / 2, 0,
+      offsetX + sceneW / 2, offsetY + sceneH / 2, sceneW * 0.7
+    )
+    ambientGrad.addColorStop(0, scene.ambientColor + '18')
+    ambientGrad.addColorStop(1, 'transparent')
+    ctx.fillStyle = ambientGrad
+    ctx.fillRect(offsetX, offsetY, sceneW, sceneH)
+
+    // ── Scene objects (buildings, trees, etc.) ──────────────────
+    // Collect all drawables for Z-sort (pixel-agents renderScene style)
+    interface ZDrawable { zY: number; draw: (c: CanvasRenderingContext2D) => void }
+    const drawables: ZDrawable[] = []
+
+    scene.objects.forEach(obj => {
+      const cached = getCachedSprite(obj.sprite, ZOOM)
+      const px = offsetX + obj.col * TILE_SIZE * ZOOM
+      const py = offsetY + obj.row * TILE_SIZE * ZOOM
+      const zY = obj.zY ?? (py + cached.height)
+      drawables.push({
+        zY,
+        draw: (c) => c.drawImage(cached, px, py)
+      })
+    })
+
+    // ── Bot characters ──────────────────────────────────────────
+    Object.entries(botStatesRef.current).forEach(([botId, bs]) => {
+      // Update animation
+      bs.frameTimer += dt
+
+      // Auto-wander: give idle bots new random targets periodically
+      if (bs.state === 'idle') {
+        bs.wanderTimer = (bs.wanderTimer ?? 0) + dt
+        if (bs.wanderTimer > WANDER_INTERVAL + Math.random() * 2) {
+          bs.wanderTimer = 0
+          const newCol = 2 + Math.floor(Math.random() * (scene.cols - 4))
+          const newRow = Math.floor(scene.rows * 0.5) + Math.floor(Math.random() * Math.floor(scene.rows * 0.45))
+          bs.targetX = newCol * TILE_SIZE + TILE_SIZE / 2
+          bs.targetY = newRow * TILE_SIZE + TILE_SIZE / 2
+          bs.state = 'walk'
+        }
+      }
+
+      if (bs.state === 'walk') {
+        if (bs.frameTimer >= WALK_FRAME_DURATION) {
+          bs.frameTimer -= WALK_FRAME_DURATION
+          bs.frame = (bs.frame + 1) % 4
+        }
+        // Move toward target (lerp, pixel-agents characters.ts style)
+        const dx = bs.targetX - bs.x, dy = bs.targetY - bs.y
+        const dist = Math.hypot(dx, dy)
+        if (dist < 1) {
+          bs.x = bs.targetX; bs.y = bs.targetY
+          bs.state = 'idle'; bs.frame = 0
+          bs.wanderTimer = 0
+        } else {
+          const speed = CHAR_WALK_SPEED * TILE_SIZE
+          bs.x += (dx / dist) * speed
+          bs.y += (dy / dist) * speed
+          // Update direction
+          if (Math.abs(dx) > Math.abs(dy)) {
+            bs.dir = dx > 0 ? 'right' : 'left'
+          } else {
+            bs.dir = dy > 0 ? 'down' : 'up'
+          }
+        }
+      }
+
+      const sprites = getCharacterSprites(bs.paletteIndex)
+      const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
+      const cached = getCachedSprite(spriteData, CHAR_ZOOM)
+
+      // Pixel position on canvas
+      const px = offsetX + Math.round(bs.x * ZOOM) - cached.width / 2
+      const py = offsetY + Math.round(bs.y * ZOOM) - cached.height
+      const zY = offsetY + bs.y * ZOOM  // Y-sort anchor (pixel-agents style)
+
+      const isSelected = selectedBotId === botId
+      const isHovered = hoveredBotId === botId
+
+      // White outline for selected/hovered (pixel-agents getOutlineSprite)
+      if (isSelected || isHovered) {
+        const outlineData = getOutlineSprite(spriteData)
+        const outlineCached = getCachedSprite(outlineData, CHAR_ZOOM)
+        const olAlpha = isSelected ? 0.9 : 0.5
+        drawables.push({
+          zY: zY - 0.1,
+          draw: (c) => {
+            c.save()
+            c.globalAlpha = olAlpha
+            c.drawImage(outlineCached, px - CHAR_ZOOM, py - CHAR_ZOOM)
+            c.restore()
+          }
+        })
+      }
+
+      // Selection ring
+      if (isSelected) {
+        const color = BOT_COLORS[botId] || '#4d96ff'
+        drawables.push({
+          zY: zY - 0.2,
+          draw: (c) => {
+            c.save()
+            c.beginPath()
+            c.ellipse(
+              offsetX + bs.x * ZOOM,
+              offsetY + bs.y * ZOOM + 2,
+              18, 6, 0, 0, Math.PI * 2
+            )
+            c.strokeStyle = color
+            c.lineWidth = 2
+            c.globalAlpha = 0.7 + pulse * 0.3
+            c.stroke()
+            c.restore()
+          }
+        })
+      }
+
+      // Shadow ellipse
+      drawables.push({
+        zY: zY - 0.3,
+        draw: (c) => {
+          c.save()
+          c.beginPath()
+          c.ellipse(
+            offsetX + bs.x * ZOOM,
+            offsetY + bs.y * ZOOM + 2,
+            12, 5, 0, 0, Math.PI * 2
+          )
+          c.fillStyle = 'rgba(0,0,0,0.4)'
+          c.fill()
+          c.restore()
+        }
+      })
+
+      drawables.push({ zY, draw: (c) => c.drawImage(cached, px, py) })
+
+      // Name label
+      const botColor = BOT_COLORS[botId] || '#4d96ff'
+      drawables.push({
+        zY: zY + 1,
+        draw: (c) => {
+          c.save()
+          c.font = `bold 11px 'Noto Sans SC', monospace`
+          c.textAlign = 'center'
+          const label = world?.bots[botId]?.name?.slice(0, 3) ?? botId
+          const lw = c.measureText(label).width
+          c.fillStyle = 'rgba(6,11,20,0.75)'
+          c.fillRect(
+            offsetX + bs.x * ZOOM - lw / 2 - 3,
+            offsetY + bs.y * ZOOM - cached.height - 14,
+            lw + 6, 13
+          )
+          c.fillStyle = botColor
+          c.globalAlpha = 0.95
+          c.fillText(
+            label,
+            offsetX + bs.x * ZOOM,
+            offsetY + bs.y * ZOOM - cached.height - 4
+          )
+          c.restore()
+        }
+      })
+    })
+
+    // ── Emotion bubbles (pixel-agents BUBBLE_PERMISSION_SPRITE style) ─
+    bubblesRef.current = bubblesRef.current.filter(b => b.timer > 0)
+    bubblesRef.current.forEach(bubble => {
+      bubble.timer -= dt
+      bubble.alpha = Math.min(1, bubble.timer / 0.5)
+      bubble.y -= dt * 8  // float upward
+
+      const bs = botStatesRef.current[bubble.botId]
+      if (!bs) return
+
+      const bx = offsetX + bs.x * ZOOM - 16
+      const by = offsetY + bs.y * ZOOM - getCachedSprite(
+        getFrameSprite(getCharacterSprites(bs.paletteIndex), bs.state, bs.dir, bs.frame), ZOOM
+      ).height - 20
+
+      const bubbleCached = getCachedSprite(BUBBLE_SPRITE, ZOOM)
+      drawables.push({
+        zY: offsetY + bs.y * ZOOM - 100,
+        draw: (c) => {
+          c.save()
+          c.globalAlpha = bubble.alpha
+          c.drawImage(bubbleCached, bx, by)
+          c.font = `${ZOOM * 4}px sans-serif`
+          c.textAlign = 'center'
+          c.fillText(bubble.emoji, bx + bubbleCached.width / 2, by + bubbleCached.height * 0.65)
+          c.restore()
+        }
+      })
+    })
+
+    // ── Z-sort and draw all (pixel-agents renderScene style) ────
+    drawables.sort((a, b) => a.zY - b.zY)
+    drawables.forEach(d => d.draw(ctx))
+
+    // ── Scanline overlay (CRT effect) ───────────────────────────
+    ctx.fillStyle = 'rgba(0,0,0,0.025)'
+    for (let y = 0; y < cssH; y += 3) {
+      ctx.fillRect(0, y, cssW, 1)
     }
 
-    ctx.restore();
-    animFrameRef.current = requestAnimationFrame(render);
-  }, [world, selectedBotId, hoveredBot, hoveredLoc]);
+    // ── Location name watermark ─────────────────────────────────
+    ctx.save()
+    ctx.font = `bold 11px 'Orbitron', monospace`
+    ctx.fillStyle = scene.ambientColor
+    ctx.globalAlpha = 0.5
+    ctx.textAlign = 'left'
+    ctx.fillText(`[ ${scene.name} ]`, offsetX + 8, offsetY + 16)
+    ctx.restore()
+
+    ctx.restore()
+    animFrameRef.current = requestAnimationFrame(render)
+  }, [world, selectedBotId, hoveredBotId, activeLocation, scene])
 
   useEffect(() => {
-    animFrameRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animFrameRef.current);
-  }, [render]);
+    lastTimeRef.current = performance.now()
+    animFrameRef.current = requestAnimationFrame(render)
+    return () => cancelAnimationFrame(animFrameRef.current)
+  }, [render])
 
-  // 处理鼠标点击
-  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !world) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
-
-    // 检查是否点击了 Bot
-    for (const [botId, pos] of Object.entries(botPositionsRef.current)) {
-      const dist = Math.hypot(mx - pos.x, my - pos.y);
-      if (dist < 18) {
-        onBotClick(botId);
-        return;
-      }
-    }
-
-    // 检查是否点击了地点
-    const w = canvas.width, h = canvas.height;
-    for (const [locName, cfg] of Object.entries(LOCATION_MAP_CONFIG)) {
-      const lx = (cfg.x / 100) * w;
-      const ly = (cfg.y / 100) * h;
-      const dist = Math.hypot(mx - lx, my - ly);
-      if (dist < 28) {
-        onLocationClick(locName);
-        return;
-      }
-    }
-  }, [world, onBotClick, onLocationClick]);
-
-  // 处理鼠标移动（hover 检测）
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !world) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
-
-    // Bot hover
-    let foundBot: string | null = null;
-    for (const [botId, pos] of Object.entries(botPositionsRef.current)) {
-      if (Math.hypot(mx - pos.x, my - pos.y) < 18) { foundBot = botId; break; }
-    }
-    setHoveredBot(foundBot);
-
-    // 地点 hover
-    const w = canvas.width, h = canvas.height;
-    let foundLoc: string | null = null;
-    for (const [locName, cfg] of Object.entries(LOCATION_MAP_CONFIG)) {
-      const lx = (cfg.x / 100) * w;
-      const ly = (cfg.y / 100) * h;
-      if (Math.hypot(mx - lx, my - ly) < 28) { foundLoc = locName; break; }
-    }
-    setHoveredLoc(foundLoc);
-  }, [world]);
-
-  // 响应式 Canvas 尺寸
+  // Resize observer
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current
+    if (!canvas) return
     const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      // 设置物理像素尺寸
-      canvas.width = Math.floor(rect.width * dpr);
-      canvas.height = Math.floor(rect.height * dpr);
-      // CSS 尺寸保持不变（由 className w-full h-full 控制）
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-    return () => ro.disconnect();
-  }, []);
+      const rect = canvas.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = Math.floor(rect.width * dpr)
+      canvas.height = Math.floor(rect.height * dpr)
+    }
+    resize()
+    const ro = new ResizeObserver(resize)
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [])
+
+  // Hit testing for clicks and hover
+  const getBotAtPoint = useCallback((mx: number, my: number): string | null => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const dpr = window.devicePixelRatio || 1
+    const cssW = canvas.width / dpr
+    const cssH = canvas.height / dpr
+    const sceneW = scene.cols * TILE_SIZE * ZOOM
+    const sceneH = scene.rows * TILE_SIZE * ZOOM
+    const offsetX = (cssW - sceneW) / 2
+    const offsetY = (cssH - sceneH) / 2
+
+    for (const [botId, bs] of Object.entries(botStatesRef.current)) {
+      const cx = offsetX + bs.x * ZOOM
+      const cy = offsetY + bs.y * ZOOM
+      const sprites = getCharacterSprites(bs.paletteIndex)
+      const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
+      const cached = getCachedSprite(spriteData, CHAR_ZOOM)
+      const bx = cx - cached.width / 2
+      const by = cy - cached.height
+      if (mx >= bx && mx <= bx + cached.width && my >= by && my <= by + cached.height) {
+        return botId
+      }
+    }
+    return null
+  }, [scene.cols, scene.rows])
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height) / dpr
+    const botId = getBotAtPoint(mx, my)
+    if (botId) onBotClick(botId)
+  }, [getBotAtPoint, onBotClick])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height) / dpr
+    setHoveredBotId(getBotAtPoint(mx, my))
+  }, [getBotAtPoint])
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full"
-      style={{ cursor: hoveredBot || hoveredLoc ? "pointer" : "default", imageRendering: "pixelated" }}
-      onClick={handleClick}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => { setHoveredBot(null); setHoveredLoc(null); }}
-    />
-  );
+    <div className="relative w-full h-full">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full"
+        style={{
+          cursor: hoveredBotId ? 'pointer' : 'default',
+          imageRendering: 'pixelated',
+        }}
+        onClick={handleClick}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoveredBotId(null)}
+      />
+      {/* Location selector tabs */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 flex-wrap justify-center max-w-full px-2">
+        {Object.keys(SCENE_CONFIGS).map(loc => (
+          <button
+            key={loc}
+            onClick={() => onLocationClick(loc)}
+            className={`px-2 py-0.5 text-xs font-mono border transition-all ${
+              loc === activeLocation
+                ? 'bg-blue-500/30 border-blue-400 text-blue-300'
+                : 'bg-black/40 border-white/10 text-white/50 hover:border-white/30 hover:text-white/80'
+            }`}
+            style={{ imageRendering: 'pixelated' }}
+          >
+            {loc}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
