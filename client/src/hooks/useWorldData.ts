@@ -2,8 +2,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { WorldState, Moment } from "@/types/world";
 import { MOCK_WORLD, MOCK_MOMENTS } from "@/lib/mockData";
 
-// world_engine 的 API 地址，支持环境变量覆盖
-const ENGINE_URL = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
+// 全局 engineUrl，支持运行时动态修改
+let _engineUrl = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
+
+export function setEngineUrl(url: string) {
+  _engineUrl = url.replace(/\/$/, ""); // 去掉末尾斜杠
+}
+
+export function getEngineUrl() {
+  return _engineUrl;
+}
 
 export interface WorldDataState {
   world: WorldState | null;
@@ -14,7 +22,7 @@ export interface WorldDataState {
   error: string | null;
 }
 
-export function useWorldData(pollInterval = 3000) {
+export function useWorldData(pollInterval = 3000, engineUrl?: string) {
   const [state, setState] = useState<WorldDataState>({
     world: null,
     moments: [],
@@ -24,14 +32,21 @@ export function useWorldData(pollInterval = 3000) {
     error: null,
   });
 
+  // 用 ref 追踪最新的 engineUrl，避免 stale closure
+  const engineUrlRef = useRef(engineUrl || _engineUrl);
+  useEffect(() => {
+    engineUrlRef.current = engineUrl || _engineUrl;
+  }, [engineUrl]);
+
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
 
   const fetchWorld = useCallback(async () => {
+    const url = engineUrlRef.current;
     try {
       const [worldRes, momentsRes] = await Promise.all([
-        fetch(`${ENGINE_URL}/world`, { signal: AbortSignal.timeout(5000) }),
-        fetch(`${ENGINE_URL}/moments`, { signal: AbortSignal.timeout(5000) }),
+        fetch(`${url}/world`, { signal: AbortSignal.timeout(5000) }),
+        fetch(`${url}/moments`, { signal: AbortSignal.timeout(5000) }),
       ]);
 
       if (!worldRes.ok) throw new Error(`HTTP ${worldRes.status}`);
@@ -41,10 +56,15 @@ export function useWorldData(pollInterval = 3000) {
 
       if (!isMountedRef.current) return;
 
+      // world_engine /moments 返回 { moments: [...] } 或直接 [...]
+      const momentsList = Array.isArray(momentsData)
+        ? momentsData
+        : (momentsData.moments || []);
+
       setState(prev => ({
         ...prev,
         world: worldData,
-        moments: momentsData.moments || [],
+        moments: momentsList,
         isConnected: true,
         isLoading: false,
         lastUpdated: new Date(),
@@ -55,14 +75,22 @@ export function useWorldData(pollInterval = 3000) {
       // 连接失败时使用 Mock 数据，让界面可以正常展示
       setState(prev => ({
         ...prev,
-        world: prev.world || MOCK_WORLD,
-        moments: prev.moments.length > 0 ? prev.moments : MOCK_MOMENTS,
+        world: prev.isConnected ? prev.world : (prev.world || MOCK_WORLD),
+        moments: prev.isConnected ? prev.moments : (prev.moments.length > 0 ? prev.moments : MOCK_MOMENTS),
         isConnected: false,
         isLoading: false,
         error: err instanceof Error ? err.message : "连接失败",
       }));
     }
   }, []);
+
+  // 当 engineUrl 变化时立即重新拉取
+  useEffect(() => {
+    if (engineUrl) {
+      engineUrlRef.current = engineUrl;
+      fetchWorld();
+    }
+  }, [engineUrl, fetchWorld]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -88,7 +116,8 @@ export function useWorldData(pollInterval = 3000) {
 
 // 发送消息给 Bot
 export async function sendMessage(targetId: string, message: string, senderAlias = "观察者") {
-  const res = await fetch(`${ENGINE_URL}/admin/send_message`, {
+  const url = _engineUrl;
+  const res = await fetch(`${url}/admin/send_message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ from: senderAlias, to: targetId, message }),
@@ -98,7 +127,8 @@ export async function sendMessage(targetId: string, message: string, senderAlias
 
 // 获取 Bot 详情
 export async function fetchBotDetail(botId: string) {
-  const res = await fetch(`${ENGINE_URL}/bot/${botId}/detail`, {
+  const url = _engineUrl;
+  const res = await fetch(`${url}/bot/${botId}/detail`, {
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) return null;

@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { useWorldData, sendMessage } from "@/hooks/useWorldData";
+import { useWorldData, sendMessage, setEngineUrl } from "@/hooks/useWorldData";
 import PixelCityMap from "@/components/PixelCityMap";
 import BotCard from "@/components/BotCard";
 import BotDetailPanel from "@/components/BotDetailPanel";
@@ -16,10 +16,15 @@ import TopHeader from "@/components/TopHeader";
 import { toast } from "sonner";
 
 export default function Home() {
-  const [engineUrl, setEngineUrl] = useState(
+  const [engineUrl, setEngineUrlState] = useState(
     (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000"
   );
-  const { world, moments, isConnected, isLoading, lastUpdated, error } = useWorldData(3000);
+  const { world, moments, isConnected, isLoading, lastUpdated, error } = useWorldData(3000, engineUrl);
+
+  const handleEngineUrlChange = useCallback((url: string) => {
+    setEngineUrlState(url);
+    setEngineUrl(url);
+  }, []);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [currentMapLocation, setCurrentMapLocation] = useState<string>('宝安城中村');
@@ -62,7 +67,7 @@ export default function Home() {
         isConnected={isConnected}
         lastUpdated={lastUpdated}
         engineUrl={engineUrl}
-        onEngineUrlChange={setEngineUrl}
+        onEngineUrlChange={handleEngineUrlChange}
       />
 
       {/* 主体区域 */}
