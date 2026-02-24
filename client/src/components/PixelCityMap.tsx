@@ -2,9 +2,9 @@
  * PixelCityMap - 深圳像素城市场景视图
  *
  * 渲染层次（从下到上）：
- * 1. 背景层：场景设计图（建筑、树木、地面）
- * 2. 可动元素层：单车、摩托车、轿车、出租车、船只、公交车（vehicles_sheet.png）
- * 3. Bot角色层：人物精灵（szpc_chars_sheet1/2.png）
+ * 1. 背景层：场景设计图 v3/v4（建筑、树木、地面）
+ * 2. 可动元素层：车辆/船只精灵（vehicles_sheet_v3.png + boats_sheet_v1.png）
+ * 3. Bot角色层：人物精灵（chars_sheet1_v3.png + chars_sheet2_v3.png）
  * 4. UI层：名字标签、情绪气泡、选中圆圈
  *
  * 大地图：地图尺寸为视口2倍，可拖拽平移，随Bot数量自动扩展可步行区域
@@ -14,27 +14,45 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import type { WorldState } from '@/types/world'
 import { BOT_COLORS, getEmotionColor, getDominantEmotion } from '@/types/world'
 
-// ── Scene background images ─────────────────────────────────────────────
+// ── Scene background images (v3/v4) ─────────────────────────────────────────
 const SCENE_IMAGES: Record<string, string> = {
-  '宝安城中村':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/YvCkMHkYoJrfPzRK.jpg',
-  '南山科技园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/QndyhTwuFLKRbpQX.jpg',
-  '福田CBD':     'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/QndyhTwuFLKRbpQX.jpg',
-  '华强北':      'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/fuUjYdNszROpoznh.jpg',
-  '东门老街':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/MawmexshRXeTNzwm.jpg',
-  '南山公寓':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bBPZGZJDDPQTggJX.jpg',
-  '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/qMkeoTdcqlLTdfUU.jpg',
+  '宝安城中村':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/fWtEeqJMAogpXcrN.png',
+  '南山科技园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/MihADuOxUvykEJgc.png',
+  '福田CBD':     'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/sfftTEBtWVjXOmIT.png',
+  '华强北':      'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/BrqtmMxhZAWtRigQ.png',
+  '东门老街':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/YYhKcQyDZenkNbfc.png',
+  '南山公寓':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/lKAPArmBQhffMfqj.png',
+  '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/NlazuSadnucdCoSQ.png',
 }
 
-// ── Vehicle spritesheet ───────────────────────────────────────────────────
-// vehicles_sheet.png: 512x384, 8 cols x 6 rows, each cell 64x64
-// Cols 0-3: facing right (frames 0-3), Cols 4-7: facing left (mirrored, frames 0-3)
-// Rows: 0=bicycle, 1=moto_delivery, 2=car_red, 3=taxi, 4=boat, 5=bus
-const VEHICLE_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/PdIOwZOVEteFseeO.png'
+// ── Character sprite sheets (v3) ─────────────────────────────────────────────
+// chars_sheet1_v3.png: 外卖骑手、程序员、城中村大叔、华强北商人、白领 (rows 0-4)
+// chars_sheet2_v3.png: 创业者、深漂青年、广场舞大妈、保安、跑步者 (rows 0-4)
+const CHARS_SHEET1_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/JmCkfFouADOEIqwG.png'
+const CHARS_SHEET2_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/SxMwWXfCkAgUKHpi.png'
+
+// ── Vehicle spritesheet (v3) ──────────────────────────────────────────────────
+// vehicles_sheet_v3.png: top-down pixel art vehicles
+// Layout: 8 cols x 6 rows, each cell 64x64
+// Cols 0-3: facing right (frames 0-3), Cols 4-7: facing left (mirrored)
+// Row 0: shared_bike (共享单车), Row 1: meituan_bike (美团外卖), Row 2: sweeper (扫地车)
+// Row 3: taxi (蓝白BYD出租), Row 4: huolala (货拉拉), Row 5: bus (绿色公交)
+const VEHICLE_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/IiYRsyyzNfnvnLXV.png'
+
+// ── Boat spritesheet (v1) ─────────────────────────────────────────────────────
+// boats_sheet_v1.png: top-down pixel art boats for Shenzhen Bay
+// Layout: 4 cols x 3 rows, each cell ~120x80
+// Row 0: fishing_boat (渔船), Row 1: cruise (观光游轮), Row 2: speedboat (快艇)
+const BOAT_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/PCdoQWwaXPLDGmXZ.png'
+
 const V_CELL = 64
 const V_COLS = 4  // frames per direction
-const V_ROWS = 6
 
-type VehicleType = 'bicycle' | 'moto' | 'car' | 'taxi' | 'boat' | 'bus'
+// Boat cell dimensions (boats_sheet_v1.png is 2752x1536, 4 cols x 3 rows)
+const B_CELL_W = Math.round(2752 / 4)  // 688
+const B_CELL_H = Math.round(1536 / 3)  // 512
+
+type VehicleType = 'shared_bike' | 'meituan' | 'sweeper' | 'taxi' | 'huolala' | 'bus' | 'fishing_boat' | 'cruise' | 'speedboat'
 
 interface VehicleConfig {
   row: number
@@ -42,19 +60,24 @@ interface VehicleConfig {
   speed: number       // normalized units per second
   frameRate: number   // frames per second
   zOffset: number     // z-sort offset relative to y
+  isBoat?: boolean    // use boat spritesheet
+  cellW?: number
+  cellH?: number
 }
 
 const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
-  bicycle:  { row: 0, scale: 1.4, speed: 0.06, frameRate: 8,  zOffset: 0 },
-  moto:     { row: 1, scale: 1.5, speed: 0.10, frameRate: 10, zOffset: 0 },
-  car:      { row: 2, scale: 1.8, speed: 0.08, frameRate: 8,  zOffset: 0 },
-  taxi:     { row: 3, scale: 1.8, speed: 0.09, frameRate: 8,  zOffset: 0 },
-  boat:     { row: 4, scale: 2.0, speed: 0.04, frameRate: 4,  zOffset: 0 },
-  bus:      { row: 5, scale: 2.2, speed: 0.05, frameRate: 6,  zOffset: 0 },
+  shared_bike:  { row: 0, scale: 1.2, speed: 0.05, frameRate: 8,  zOffset: 0 },
+  meituan:      { row: 1, scale: 1.4, speed: 0.09, frameRate: 10, zOffset: 0 },
+  sweeper:      { row: 2, scale: 1.6, speed: 0.04, frameRate: 6,  zOffset: 0 },
+  taxi:         { row: 3, scale: 1.8, speed: 0.09, frameRate: 8,  zOffset: 0 },
+  huolala:      { row: 4, scale: 1.9, speed: 0.07, frameRate: 8,  zOffset: 0 },
+  bus:          { row: 5, scale: 2.2, speed: 0.05, frameRate: 6,  zOffset: 0 },
+  fishing_boat: { row: 0, scale: 0.10, speed: 0.025, frameRate: 4, zOffset: 0, isBoat: true, cellW: B_CELL_W, cellH: B_CELL_H },
+  cruise:       { row: 1, scale: 0.12, speed: 0.035, frameRate: 4, zOffset: 0, isBoat: true, cellW: B_CELL_W, cellH: B_CELL_H },
+  speedboat:    { row: 2, scale: 0.08, speed: 0.055, frameRate: 6, zOffset: 0, isBoat: true, cellW: B_CELL_W, cellH: B_CELL_H },
 }
 
 // ── Vehicle road lanes per scene ──────────────────────────────────────────
-// Each lane: { type, y (normalized), xMin, xMax, dir: 1=right/-1=left }
 interface VehicleLane {
   type: VehicleType
   y: number       // normalized y position of lane center
@@ -65,60 +88,69 @@ interface VehicleLane {
 
 const SCENE_VEHICLE_LANES: Record<string, VehicleLane[]> = {
   '宝安城中村': [
-    { type: 'bicycle', y: 0.35, xMin: 0.05, xMax: 0.90, dir: 1 },
-    { type: 'bicycle', y: 0.62, xMin: 0.05, xMax: 0.90, dir: -1 },
-    { type: 'moto',    y: 0.35, xMin: 0.05, xMax: 0.90, dir: -1 },
-    { type: 'moto',    y: 0.62, xMin: 0.05, xMax: 0.90, dir: 1 },
-    { type: 'bicycle', y: 0.50, xMin: 0.10, xMax: 0.50, dir: 1 },
-    { type: 'bicycle', y: 0.50, xMin: 0.50, xMax: 0.90, dir: -1 },
+    { type: 'shared_bike', y: 0.35, xMin: 0.05, xMax: 0.90, dir: 1 },
+    { type: 'shared_bike', y: 0.62, xMin: 0.05, xMax: 0.90, dir: -1 },
+    { type: 'meituan',     y: 0.35, xMin: 0.05, xMax: 0.90, dir: -1 },
+    { type: 'meituan',     y: 0.62, xMin: 0.05, xMax: 0.90, dir: 1 },
+    { type: 'shared_bike', y: 0.50, xMin: 0.10, xMax: 0.50, dir: 1 },
+    { type: 'shared_bike', y: 0.50, xMin: 0.50, xMax: 0.90, dir: -1 },
+    { type: 'sweeper',     y: 0.78, xMin: 0.05, xMax: 0.95, dir: 1 },
   ],
   '南山科技园': [
-    { type: 'bicycle', y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'bicycle', y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'moto',    y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'car',     y: 0.80, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'taxi',    y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bus',     y: 0.85, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'shared_bike', y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'shared_bike', y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'meituan',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'taxi',        y: 0.80, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',        y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bus',         y: 0.85, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'sweeper',     y: 0.88, xMin: 0.05, xMax: 0.95, dir: -1 },
   ],
   '福田CBD': [
-    { type: 'car',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'car',     y: 0.60, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'taxi',    y: 0.65, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'taxi',    y: 0.70, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bus',     y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'moto',    y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'bicycle', y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'taxi',        y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',        y: 0.60, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'huolala',     y: 0.65, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',        y: 0.70, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bus',         y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'meituan',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'shared_bike', y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'sweeper',     y: 0.82, xMin: 0.05, xMax: 0.95, dir: 1 },
   ],
   '华强北': [
-    { type: 'moto',    y: 0.30, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'moto',    y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bicycle', y: 0.50, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'bicycle', y: 0.50, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'moto',    y: 0.70, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'car',     y: 0.85, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'shared_bike', y: 0.50, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'shared_bike', y: 0.50, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'meituan',     y: 0.70, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',        y: 0.85, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'sweeper',     y: 0.88, xMin: 0.05, xMax: 0.95, dir: 1 },
   ],
   '东门老街': [
-    { type: 'bicycle', y: 0.30, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'bicycle', y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'moto',    y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bicycle', y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'moto',    y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'shared_bike', y: 0.30, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'shared_bike', y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'shared_bike', y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'meituan',     y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'sweeper',     y: 0.80, xMin: 0.05, xMax: 0.95, dir: 1 },
   ],
   '南山公寓': [
-    { type: 'car',     y: 0.50, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'car',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bicycle', y: 0.60, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'moto',    y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'taxi',    y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
-    { type: 'bus',     y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'taxi',        y: 0.50, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',        y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'shared_bike', y: 0.60, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'meituan',     y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'taxi',        y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'bus',         y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'sweeper',     y: 0.83, xMin: 0.05, xMax: 0.95, dir: 1 },
   ],
   '深圳湾公园': [
-    { type: 'bicycle', y: 0.32, xMin: 0.02, xMax: 0.98, dir: 1 },
-    { type: 'bicycle', y: 0.32, xMin: 0.02, xMax: 0.98, dir: -1 },
-    { type: 'bicycle', y: 0.36, xMin: 0.02, xMax: 0.98, dir: 1 },
-    { type: 'boat',    y: 0.70, xMin: 0.02, xMax: 0.98, dir: 1 },
-    { type: 'boat',    y: 0.75, xMin: 0.02, xMax: 0.98, dir: -1 },
-    { type: 'boat',    y: 0.80, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'shared_bike', y: 0.32, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'shared_bike', y: 0.32, xMin: 0.02, xMax: 0.98, dir: -1 },
+    { type: 'shared_bike', y: 0.36, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'meituan',     y: 0.38, xMin: 0.02, xMax: 0.98, dir: -1 },
+    { type: 'sweeper',     y: 0.40, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'fishing_boat', y: 0.68, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'cruise',       y: 0.75, xMin: 0.02, xMax: 0.98, dir: -1 },
+    { type: 'speedboat',    y: 0.82, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'fishing_boat', y: 0.88, xMin: 0.02, xMax: 0.98, dir: -1 },
   ],
 }
 
@@ -132,10 +164,10 @@ interface VehicleState {
   dir: 1 | -1
   frame: number
   frameTimer: number
-  // For large map: wrap around
 }
 
-// ── Spritesheet configuration ────────────────────────────────────────────
+// ── Character spritesheet configuration ─────────────────────────────────────
+// v3 sheets: each cell is 196x153px, 6 cols (idle + 5 walk frames), 5 rows per sheet
 const SHEET_CELL_W = 196
 const SHEET_CELL_H = 153
 const SHEET_COLS = 6
@@ -234,7 +266,6 @@ const WALK_FRAME_DURATION = 0.12
 const WANDER_INTERVAL = 3.5
 
 // ── Large map constants ───────────────────────────────────────────────────
-// Map world size is MAP_SCALE times the viewport
 const MAP_SCALE = 2.0
 
 type Direction = 'left' | 'right' | 'down' | 'up'
@@ -278,7 +309,6 @@ const imageLoaded: Record<string, boolean> = {}
 function preloadImage(url: string): HTMLImageElement {
   if (!imageCache[url]) {
     const img = new Image()
-    // No crossOrigin: CDN doesn't support CORS headers, but we only need drawImage (no pixel read)
     img.onload = () => { imageLoaded[url] = true }
     img.onerror = () => { imageLoaded[url] = false }
     img.src = url
@@ -319,15 +349,12 @@ function initVehicles(location: string, botCount: number): VehicleState[] {
   const lanes = SCENE_VEHICLE_LANES[location] || []
   const vehicles: VehicleState[] = []
   
-  // Base count per lane + extra based on bot count
   const extraPerLane = Math.floor(botCount / 5)
   
   lanes.forEach((lane, laneIdx) => {
-    // 3-6 vehicles per lane base, more with more bots
     const count = 3 + Math.min(extraPerLane, 4)
     for (let i = 0; i < count; i++) {
       const config = VEHICLE_CONFIGS[lane.type]
-      // Spread vehicles evenly across the lane range
       const spread = lane.xMax - lane.xMin
       const x = lane.xMin + (i / count) * spread + Math.random() * (spread / count) * 0.5
       vehicles.push({
@@ -352,33 +379,68 @@ function drawVehicle(
   v: VehicleState,
   imgDrawX: number, imgDrawY: number, imgDrawW: number, imgDrawH: number,
 ) {
-  const sheet = imageCache[VEHICLE_SHEET_URL]
-  if (!sheet || !imageLoaded[VEHICLE_SHEET_URL]) return
-  
   const config = VEHICLE_CONFIGS[v.type]
-  const frameCol = v.frame % V_COLS
-  // Cols 0-3: right, Cols 4-7: left
-  const sheetCol = v.dir === 1 ? frameCol : frameCol + V_COLS
   
-  const sx = sheetCol * V_CELL
-  const sy = config.row * V_CELL
-  
-  const renderW = Math.round(V_CELL * config.scale)
-  const renderH = Math.round(V_CELL * config.scale)
-  
-  const cx = imgDrawX + v.x * imgDrawW
-  const cy = imgDrawY + v.y * imgDrawH
-  
-  ctx.save()
-  ctx.imageSmoothingEnabled = false
-  ctx.drawImage(
-    sheet,
-    sx, sy, V_CELL, V_CELL,
-    cx - renderW / 2,
-    cy - renderH * 0.75,
-    renderW, renderH
-  )
-  ctx.restore()
+  if (config.isBoat) {
+    // Use boat spritesheet
+    const sheet = imageCache[BOAT_SHEET_URL]
+    if (!sheet || !imageLoaded[BOAT_SHEET_URL]) return
+    
+    const cellW = config.cellW!
+    const cellH = config.cellH!
+    const frameCol = v.frame % V_COLS
+    // For boats: cols 0-3 right, cols 0-3 left (flip horizontally)
+    const sx = frameCol * cellW
+    const sy = config.row * cellH
+    
+    const renderW = Math.round(cellW * config.scale)
+    const renderH = Math.round(cellH * config.scale)
+    
+    const cx = imgDrawX + v.x * imgDrawW
+    const cy = imgDrawY + v.y * imgDrawH
+    
+    ctx.save()
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    
+    if (v.dir === -1) {
+      // Flip horizontally
+      ctx.translate(cx, 0)
+      ctx.scale(-1, 1)
+      ctx.drawImage(sheet, sx, sy, cellW, cellH, -renderW / 2, cy - renderH * 0.6, renderW, renderH)
+    } else {
+      ctx.drawImage(sheet, sx, sy, cellW, cellH, cx - renderW / 2, cy - renderH * 0.6, renderW, renderH)
+    }
+    ctx.restore()
+  } else {
+    // Use vehicle spritesheet
+    const sheet = imageCache[VEHICLE_SHEET_URL]
+    if (!sheet || !imageLoaded[VEHICLE_SHEET_URL]) return
+    
+    const frameCol = v.frame % V_COLS
+    // Cols 0-3: right, Cols 4-7: left
+    const sheetCol = v.dir === 1 ? frameCol : frameCol + V_COLS
+    
+    const sx = sheetCol * V_CELL
+    const sy = config.row * V_CELL
+    
+    const renderW = Math.round(V_CELL * config.scale)
+    const renderH = Math.round(V_CELL * config.scale)
+    
+    const cx = imgDrawX + v.x * imgDrawW
+    const cy = imgDrawY + v.y * imgDrawH
+    
+    ctx.save()
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(
+      sheet,
+      sx, sy, V_CELL, V_CELL,
+      cx - renderW / 2,
+      cy - renderH * 0.75,
+      renderW, renderH
+    )
+    ctx.restore()
+  }
 }
 
 export default function PixelCityMap({
@@ -405,9 +467,10 @@ export default function PixelCityMap({
   // Preload all images
   useEffect(() => {
     Object.values(SCENE_IMAGES).forEach(url => preloadImage(url))
-    preloadImage('https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png')
-    preloadImage('https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png')
+    preloadImage(CHARS_SHEET1_URL)
+    preloadImage(CHARS_SHEET2_URL)
     preloadImage(VEHICLE_SHEET_URL)
+    preloadImage(BOAT_SHEET_URL)
   }, [])
 
   // Initialize vehicles when location changes
@@ -422,7 +485,6 @@ export default function PixelCityMap({
     if (!world) return
     const allBotIds = Object.keys(world.bots).filter(id => world.bots[id].status === 'alive')
 
-    // Re-init vehicles if bot count changed significantly
     const currentVehicleCount = vehiclesRef.current.length
     const expectedMin = initVehicles(activeLocation, allBotIds.length).length
     if (Math.abs(currentVehicleCount - expectedMin) > 3) {
@@ -512,29 +574,23 @@ export default function PixelCityMap({
     const bgUrl = SCENE_IMAGES[activeLocation]
     const bgImg = bgUrl ? preloadImage(bgUrl) : null
 
-    // World size (larger than viewport)
     const worldW = cssW * MAP_SCALE
     const worldH = cssH * MAP_SCALE
 
-    // Pan limits: allow panning up to (worldW - cssW) / 2 in each direction
     const maxPanX = (worldW - cssW) / 2
     const maxPanY = (worldH - cssH) / 2
 
-    // Clamp pan
     const panX = Math.max(-maxPanX, Math.min(maxPanX, panOffsetRef.current.x))
     const panY = Math.max(-maxPanY, Math.min(maxPanY, panOffsetRef.current.y))
     panOffsetRef.current.x = panX
     panOffsetRef.current.y = panY
 
-    // Image draw position: centered, then offset by pan
-    // The image fills the world area, centered in viewport + pan
     let imgDrawX = (cssW - worldW) / 2 + panX
     let imgDrawY = (cssH - worldH) / 2 + panY
     let imgDrawW = worldW
     let imgDrawH = worldH
 
     if (bgImg && imageLoaded[bgUrl!]) {
-      // Maintain aspect ratio within world bounds
       const imgAspect = bgImg.width / bgImg.height
       const worldAspect = worldW / worldH
       if (worldAspect > imgAspect) {
@@ -552,17 +608,12 @@ export default function PixelCityMap({
       ctx.imageSmoothingQuality = 'high'
       ctx.drawImage(bgImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH)
 
-      // ── Procedural ground extension: fill areas outside image ────────
-      // Tile a simple pixel pattern to fill gaps
+      // ── Procedural ground extension ───────────────────────────────────
       const tileColor = meta.ambientColor + '18'
       ctx.fillStyle = tileColor
-      // Left gap
       if (imgDrawX > 0) ctx.fillRect(0, 0, imgDrawX, cssH)
-      // Right gap
       if (imgDrawX + imgDrawW < cssW) ctx.fillRect(imgDrawX + imgDrawW, 0, cssW - imgDrawX - imgDrawW, cssH)
-      // Top gap
       if (imgDrawY > 0) ctx.fillRect(0, 0, cssW, imgDrawY)
-      // Bottom gap
       if (imgDrawY + imgDrawH < cssH) ctx.fillRect(0, imgDrawY + imgDrawH, cssW, cssH - imgDrawY - imgDrawH)
     } else {
       ctx.fillStyle = meta.ambientColor + '22'
@@ -605,23 +656,24 @@ export default function PixelCityMap({
       // Only draw if within visible area
       const vCx = imgDrawX + v.x * imgDrawW
       const vCy = imgDrawY + v.y * imgDrawH
-      if (vCx < -50 || vCx > cssW + 50 || vCy < -50 || vCy > cssH + 50) return
+      if (vCx < -100 || vCx > cssW + 100 || vCy < -100 || vCy > cssH + 100) return
       
       const vConfig = VEHICLE_CONFIGS[v.type]
-      const renderH = V_CELL * vConfig.scale
       
-      // Shadow
-      drawables.push({
-        zY: vCy - 0.5,
-        draw: (c) => {
-          c.save()
-          c.beginPath()
-          c.ellipse(vCx, vCy + 2, V_CELL * vConfig.scale * 0.4, V_CELL * vConfig.scale * 0.12, 0, 0, Math.PI * 2)
-          c.fillStyle = 'rgba(0,0,0,0.25)'
-          c.fill()
-          c.restore()
-        }
-      })
+      // Shadow (skip for boats - they're on water)
+      if (!vConfig.isBoat) {
+        drawables.push({
+          zY: vCy - 0.5,
+          draw: (c) => {
+            c.save()
+            c.beginPath()
+            c.ellipse(vCx, vCy + 2, V_CELL * vConfig.scale * 0.4, V_CELL * vConfig.scale * 0.12, 0, 0, Math.PI * 2)
+            c.fillStyle = 'rgba(0,0,0,0.25)'
+            c.fill()
+            c.restore()
+          }
+        })
+      }
       
       // Vehicle sprite
       const vSnap = { ...v }
@@ -711,7 +763,6 @@ export default function PixelCityMap({
       const cy = imgDrawY + bs.y * imgDrawH
       const zY = cy
 
-      // Skip if off-screen
       if (cx < -renderW || cx > cssW + renderW || cy < -renderH || cy > cssH + renderH) return
 
       const isSelected = selectedBotId === botId
@@ -766,9 +817,7 @@ export default function PixelCityMap({
       drawables.push({
         zY,
         draw: (c) => {
-          const sheetUrl = config.sheet === 1
-            ? 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png'
-            : 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png'
+          const sheetUrl = config.sheet === 1 ? CHARS_SHEET1_URL : CHARS_SHEET2_URL
           const sheet = imageCache[sheetUrl]
           if (!sheet || !imageLoaded[sheetUrl]) {
             c.save()
@@ -889,12 +938,10 @@ export default function PixelCityMap({
     drawables.sort((a, b) => a.zY - b.zY)
     drawables.forEach(d => d.draw(ctx))
 
-    // ── Pan indicator (minimap hint) ──────────────────────────────────
+    // ── Pan indicator ─────────────────────────────────────────────────
     if (Math.abs(panX) > 10 || Math.abs(panY) > 10) {
-      const indicatorAlpha = 0.5
       ctx.save()
-      ctx.globalAlpha = indicatorAlpha
-      // Small compass arrows at edge
+      ctx.globalAlpha = 0.5
       const arrowSize = 8
       const margin = 20
       ctx.fillStyle = meta.ambientColor
@@ -1036,7 +1083,6 @@ export default function PixelCityMap({
     setHoveredBotId(getBotAtPoint(mx, my))
   }, [getBotAtPoint, getCanvasPos])
 
-  // Touch support for mobile pan
   const touchStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 1) {
