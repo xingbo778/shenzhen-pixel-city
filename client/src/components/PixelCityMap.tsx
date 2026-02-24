@@ -214,12 +214,21 @@ const CHAR_FRAME_COORDS: Record<string, { sheet: 1|2; rowY: number; rowH: number
   '城中村大叔': { sheet: 1, rowY: 567, rowH: 419, frames: [[52,309],[420,607],[753,955],[1097,1294],[52,309],[420,607]] },
   '华强北商人': { sheet: 1, rowY: 567, rowH: 419, frames: [[1414,1678],[1754,2018],[2121,2350],[2472,2677],[1414,1678],[1754,2018]] },
   '白领':     { sheet: 1, rowY: 1083, rowH: 425, frames: [[75,268],[431,607],[757,950],[1095,1295],[75,268],[431,607]] },
+  '跑步者':   { sheet: 1, rowY: 1083, rowH: 425, frames: [[1450,1634],[1806,1978],[2133,2321],[2478,2654],[1450,1634],[1806,1978]] },
   // chars_sheet2_v3.png: rowH = actual content height (~344-371px)
   '创业者':   { sheet: 2, rowY: 17,   rowH: 344, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
   '深漂青年': { sheet: 2, rowY: 401,  rowH: 344, frames: [[70,206],[344,482],[592,762],[866,1036],[1158,1329],[1439,1582]] },
   '广场舞大妈': { sheet: 2, rowY: 796, rowH: 356, frames: [[61,210],[336,486],[623,762],[892,1037],[1156,1298],[1441,1580]] },
   '保安':     { sheet: 2, rowY: 1152, rowH: 371, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
-  '跑步者':   { sheet: 1, rowY: 1083, rowH: 425, frames: [[1450,1634],[1806,1978],[2133,2321],[2478,2654],[1450,1634],[1806,1978]] },
+  // World-engine occupations: mapped to existing sprite rows (aliases)
+  '金融人':   { sheet: 1, rowY: 567, rowH: 419, frames: [[1414,1678],[1754,2018],[2121,2350],[2472,2677],[1414,1678],[1754,2018]] }, // -> 华强北商人
+  '工人':     { sheet: 1, rowY: 567, rowH: 419, frames: [[52,309],[420,607],[753,955],[1097,1294],[52,309],[420,607]] },            // -> 城中村大叔
+  '设计师':   { sheet: 1, rowY: 41,   rowH: 424, frames: [[1457,1645],[1806,1989],[2133,2331],[2483,2676],[1457,1645],[1806,1989]] }, // -> 程序员
+  '富二代':   { sheet: 1, rowY: 1083, rowH: 425, frames: [[75,268],[431,607],[757,950],[1095,1295],[75,268],[431,607]] },            // -> 白领
+  '商人':     { sheet: 1, rowY: 567, rowH: 419, frames: [[1414,1678],[1754,2018],[2121,2350],[2472,2677],[1414,1678],[1754,2018]] }, // -> 华强北商人
+  '餐馆老板': { sheet: 1, rowY: 567, rowH: 419, frames: [[52,309],[420,607],[753,955],[1097,1294],[52,309],[420,607]] },            // -> 城中村大叔
+  '音乐人':   { sheet: 2, rowY: 401,  rowH: 344, frames: [[70,206],[344,482],[592,762],[866,1036],[1158,1329],[1439,1582]] },        // -> 深漂青年
+  '网红':     { sheet: 2, rowY: 17,   rowH: 344, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },        // -> 创业者
 }
 
 interface SpriteConfig {
@@ -230,82 +239,109 @@ interface SpriteConfig {
   offsetY: number
 }
 
-// Legacy configs (kept for fallback, but rendering now uses CHAR_FRAME_COORDS)
-// scale calibrated so all chars render at ~120px tall:
-//   sheet1 rowH~424px -> scale=0.283; sheet2 rowH~360px -> scale=0.333
+// scale calibrated so all chars render at ~100px tall:
+//   sheet1 rowH~424px -> scale=0.236; sheet2 rowH~344px -> scale=0.290
+// TARGET_CHAR_H = 65px for all characters (calibrated to match isometric building scale)
+const TARGET_CHAR_H = 65
 const SPRITE_CONFIGS: Record<string, SpriteConfig> = {
-  '外卖骑手':   { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.85 },
-  '程序员':     { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  '城中村大叔': { sheet: 1, row: 1, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  '华强北商人': { sheet: 1, row: 1, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  '白领':       { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  '创业者':     { sheet: 2, row: 0, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  '深漂青年':   { sheet: 2, row: 1, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  '广场舞大妈': { sheet: 2, row: 2, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  '保安':       { sheet: 2, row: 3, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  '跑步者':     { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
+  // Sheet 1 characters
+  '外卖骑手':   { sheet: 1, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 424, offsetY: 0.85 },
+  '程序员':     { sheet: 1, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 424, offsetY: 0.90 },
+  '城中村大叔': { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 },
+  '华强北商人': { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 },
+  '白领':       { sheet: 1, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 425, offsetY: 0.90 },
+  '跑步者':     { sheet: 1, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 425, offsetY: 0.90 },
+  // Sheet 2 characters
+  '创业者':     { sheet: 2, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 344, offsetY: 0.90 },
+  '深漂青年':   { sheet: 2, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 344, offsetY: 0.90 },
+  '广场舞大妈': { sheet: 2, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 356, offsetY: 0.90 },
+  '保安':       { sheet: 2, row: 3, frameCount: 6, scale: TARGET_CHAR_H / 371, offsetY: 0.90 },
+  // World-engine occupations mapped to existing sprites (ensures correct scale)
+  '金融人':     { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 }, // -> 华强北商人
+  '工人':       { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 }, // -> 城中村大叔
+  '设计师':     { sheet: 1, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 424, offsetY: 0.90 }, // -> 程序员
+  '富二代':     { sheet: 1, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 425, offsetY: 0.90 }, // -> 白领
+  '商人':       { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 }, // -> 华强北商人
+  '餐馆老板':   { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 }, // -> 城中村大叔
+  '音乐人':     { sheet: 2, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 344, offsetY: 0.90 }, // -> 深漂青年
+  '网红':       { sheet: 2, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 344, offsetY: 0.90 }, // -> 创业者
 }
 
 const FALLBACK_OCCUPATIONS = ['创业者', '白领', '深漂青年', '程序员', '保安', '华强北商人', '广场舞大妈', '城中村大叔', '跑步者', '外卖骑手']
 
 const FALLBACK_CONFIGS: SpriteConfig[] = [
-  { sheet: 2, row: 0, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  { sheet: 2, row: 1, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  { sheet: 2, row: 3, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  { sheet: 1, row: 1, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  { sheet: 2, row: 2, frameCount: 6, scale: 0.333, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  { sheet: 1, row: 2, frameCount: 6, scale: 0.283, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 6, scale: 0.283, offsetY: 0.85 },
+  { sheet: 2, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 344, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 425, offsetY: 0.90 },
+  { sheet: 2, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 344, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 424, offsetY: 0.90 },
+  { sheet: 2, row: 3, frameCount: 6, scale: TARGET_CHAR_H / 371, offsetY: 0.90 },
+  { sheet: 1, row: 1, frameCount: 6, scale: TARGET_CHAR_H / 419, offsetY: 0.90 },
+  { sheet: 2, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 356, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 424, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 6, scale: TARGET_CHAR_H / 425, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: TARGET_CHAR_H / 424, offsetY: 0.85 },
 ]
 
-// -- Walkable zones per scene ----------------------------------------------
-const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
+// -- Waypoint paths per scene (characters walk along these paths) ----------
+// Each scene has multiple named paths; characters pick a random path and walk along it
+const SCENE_WAYPOINTS: Record<string, Array<[number, number][]>> = {
+  // Baoan urban village: narrow alleys
   '宝安城中村': [
-    [0.15, 0.22, 0.70, 0.26],
-    [0.12, 0.50, 0.30, 0.32],
-    [0.55, 0.50, 0.32, 0.32],
-    [0.68, 0.22, 0.20, 0.28],
+    [[0.08,0.52],[0.25,0.48],[0.42,0.52],[0.58,0.48],[0.75,0.52],[0.88,0.48]],
+    [[0.30,0.25],[0.32,0.38],[0.35,0.52],[0.33,0.65],[0.30,0.78]],
+    [[0.60,0.25],[0.62,0.38],[0.65,0.52],[0.63,0.65],[0.60,0.78]],
+    [[0.15,0.62],[0.30,0.60],[0.45,0.62],[0.60,0.60],[0.75,0.62]],
   ],
+  // Nanshan tech park: sidewalks
   '南山科技园': [
-    [0.22, 0.30, 0.56, 0.16],
-    [0.10, 0.46, 0.80, 0.26],
-    [0.15, 0.72, 0.70, 0.16],
+    [[0.05,0.50],[0.20,0.42],[0.38,0.35],[0.55,0.28],[0.72,0.22],[0.88,0.16]],
+    [[0.10,0.72],[0.25,0.65],[0.42,0.58],[0.58,0.52],[0.75,0.46]],
+    [[0.30,0.35],[0.35,0.42],[0.42,0.48],[0.48,0.42],[0.42,0.35]],
   ],
+  // Futian CBD: wide boulevards
   '福田CBD': [
-    [0.18, 0.38, 0.64, 0.32],
-    [0.05, 0.70, 0.90, 0.16],
+    [[0.05,0.58],[0.18,0.50],[0.32,0.42],[0.48,0.35],[0.62,0.28],[0.78,0.22],[0.92,0.16]],
+    [[0.05,0.75],[0.20,0.68],[0.35,0.62],[0.52,0.55],[0.68,0.48],[0.85,0.42]],
+    [[0.15,0.55],[0.22,0.50],[0.30,0.45],[0.38,0.40],[0.45,0.35]],
   ],
+  // Huaqiangbei: busy pedestrian street
   '华强北': [
-    [0.03, 0.18, 0.44, 0.65],
-    [0.52, 0.18, 0.44, 0.65],
-    [0.08, 0.80, 0.84, 0.14],
+    [[0.08,0.20],[0.10,0.32],[0.12,0.45],[0.14,0.58],[0.16,0.70],[0.14,0.82]],
+    [[0.55,0.20],[0.57,0.32],[0.59,0.45],[0.61,0.58],[0.63,0.70],[0.61,0.82]],
+    [[0.10,0.82],[0.25,0.80],[0.40,0.82],[0.55,0.80],[0.70,0.82],[0.85,0.80]],
+    [[0.12,0.35],[0.20,0.38],[0.30,0.35],[0.38,0.38],[0.45,0.35]],
   ],
+  // Dongmen old street
   '东门老街': [
-    [0.12, 0.20, 0.76, 0.22],
-    [0.12, 0.38, 0.20, 0.36],
-    [0.42, 0.38, 0.46, 0.36],
-    [0.12, 0.72, 0.76, 0.18],
+    [[0.08,0.28],[0.22,0.25],[0.38,0.22],[0.55,0.25],[0.70,0.22],[0.85,0.25]],
+    [[0.15,0.42],[0.18,0.55],[0.22,0.68],[0.20,0.80]],
+    [[0.50,0.42],[0.52,0.55],[0.55,0.68],[0.52,0.80]],
+    [[0.08,0.78],[0.25,0.75],[0.42,0.78],[0.60,0.75],[0.78,0.78]],
   ],
+  // Nanshan apartments
   '南山公寓': [
-    [0.22, 0.40, 0.56, 0.20],
-    [0.60, 0.52, 0.28, 0.26],
-    [0.08, 0.70, 0.84, 0.14],
+    [[0.10,0.45],[0.25,0.42],[0.40,0.45],[0.55,0.42],[0.70,0.45]],
+    [[0.62,0.55],[0.68,0.62],[0.72,0.70],[0.68,0.78]],
+    [[0.08,0.72],[0.25,0.70],[0.42,0.72],[0.60,0.70],[0.78,0.72]],
   ],
+  // Shenzhen Bay Park: waterfront promenade
   '深圳湾公园': [
-    // 上方绿草地（左侧）
-    [0.02, 0.02, 0.38, 0.22],
-    // 上方滨海步道（右侧）
-    [0.46, 0.02, 0.52, 0.22],
-    // 自行车道/道路（横向）
-    [0.02, 0.22, 0.96, 0.08],
-    // 木质健身区/栈道（y 0.30~0.42，不超过水面）
-    [0.02, 0.30, 0.88, 0.10],
-    // 右侧草地（y 0.28~0.42）
-    [0.56, 0.28, 0.42, 0.14],
+    [[0.02,0.26],[0.20,0.25],[0.38,0.26],[0.55,0.25],[0.72,0.26],[0.90,0.25]],
+    [[0.05,0.34],[0.20,0.33],[0.38,0.34],[0.55,0.33],[0.72,0.34],[0.88,0.33]],
+    [[0.05,0.08],[0.15,0.12],[0.25,0.08],[0.35,0.12],[0.25,0.18],[0.15,0.14]],
+    [[0.60,0.05],[0.70,0.10],[0.80,0.05],[0.90,0.10],[0.85,0.18],[0.70,0.14]],
   ],
+}
+
+// Fallback spawn zones (used for initial position only)
+const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
+  '宝安城中村': [[0.08,0.22,0.80,0.60]],
+  '南山科技园': [[0.05,0.16,0.85,0.60]],
+  '福田CBD':    [[0.05,0.16,0.88,0.62]],
+  '华强北':     [[0.08,0.18,0.78,0.66]],
+  '东门老街':   [[0.08,0.20,0.80,0.62]],
+  '南山公寓':   [[0.08,0.40,0.80,0.40]],
+  '深圳湾公园': [[0.02,0.02,0.96,0.38]],
 }
 
 // -- Scene metadata --------------------------------------------------------
@@ -379,8 +415,20 @@ function preloadImage(url: string): HTMLImageElement {
   return imageCache[url]!
 }
 
-// -- Random point in walk zones --------------------------------------------
+// -- Waypoint-based walk target selection ---------------------------------
+// Returns the next waypoint on a random path for the given location
 function getRandomWalkPoint(location: string): { x: number; y: number } {
+  const paths = SCENE_WAYPOINTS[location]
+  if (paths && paths.length > 0) {
+    const path = paths[Math.floor(Math.random() * paths.length)]
+    const wp = path[Math.floor(Math.random() * path.length)]
+    // Add small jitter so characters don't all stack on same point
+    return {
+      x: wp[0] + (Math.random() - 0.5) * 0.04,
+      y: wp[1] + (Math.random() - 0.5) * 0.03,
+    }
+  }
+  // Fallback to zone-based
   const zones = SCENE_WALK_ZONES[location] || [[0.1, 0.3, 0.8, 0.5]]
   const zone = zones[Math.floor(Math.random() * zones.length)]
   return {
@@ -390,6 +438,18 @@ function getRandomWalkPoint(location: string): { x: number; y: number } {
 }
 
 function getInitialWalkPoint(location: string, index: number, total: number): { x: number; y: number } {
+  const paths = SCENE_WAYPOINTS[location]
+  if (paths && paths.length > 0) {
+    const pathIdx = index % paths.length
+    const path = paths[pathIdx]
+    const wpIdx = total > 1 ? Math.floor((index / total) * path.length) : 0
+    const wp = path[Math.min(wpIdx, path.length - 1)]
+    return {
+      x: wp[0] + (Math.random() - 0.5) * 0.05,
+      y: wp[1] + (Math.random() - 0.5) * 0.04,
+    }
+  }
+  // Fallback to zone-based
   const zones = SCENE_WALK_ZONES[location] || [[0.1, 0.3, 0.8, 0.5]]
   const zone = zones[index % zones.length]
   const t = total > 1 ? index / (total - 1) : 0.5
@@ -776,11 +836,12 @@ export default function PixelCityMap({
           const speed = CHAR_WALK_SPEED / (cssW * MAP_SCALE)
           bs.x += (dx / dist) * speed
           bs.y += (dy / dist) * speed
-          if (Math.abs(dx) > Math.abs(dy)) {
+          // Only update direction for horizontal movement to keep sprite facing correct way
+          // For vertical-dominant movement, keep the last horizontal direction
+          if (Math.abs(dx) > 0.001) {
             bs.dir = dx > 0 ? 'right' : 'left'
-          } else {
-            bs.dir = dy > 0 ? 'down' : 'up'
           }
+          // If purely vertical movement with no horizontal component, keep existing dir
         }
       }
 
@@ -889,7 +950,22 @@ export default function PixelCityMap({
         })
       }
 
-      const walkFrameIdx = bs.state === 'idle' ? 0 : bs.frame % (charCoords ? charCoords.frames.length : 6)
+      // Frame selection: frames 0-3 are right-facing, frames 4-5 are left-facing
+      // Use left frames when moving left, right frames when moving right
+      // No horizontal flip needed - sprites have both directions built in
+      const totalFrames = charCoords ? charCoords.frames.length : 6
+      const rightFrameCount = Math.ceil(totalFrames / 2)  // typically 4
+      const leftFrameCount = totalFrames - rightFrameCount  // typically 2
+      let walkFrameIdx: number
+      if (bs.state === 'idle') {
+        walkFrameIdx = isFlipped ? rightFrameCount : 0  // idle: first frame of correct direction
+      } else if (isFlipped) {
+        // Left-facing: use frames rightFrameCount..totalFrames-1
+        walkFrameIdx = rightFrameCount + (bs.frame % leftFrameCount)
+      } else {
+        // Right-facing: use frames 0..rightFrameCount-1
+        walkFrameIdx = bs.frame % rightFrameCount
+      }
       drawables.push({
         zY,
         draw: (c) => {
@@ -922,30 +998,19 @@ export default function PixelCityMap({
           const sy = charCoords.rowY
           const rW = Math.round(sw * config.scale)
           const rH = Math.round(sh * config.scale)
-          const dx = cx - rW / 2
-          const dy = cy - rH * config.offsetY
+          const ddx = cx - rW / 2
+          const ddy = cy - rH * config.offsetY
 
           c.save()
           c.globalAlpha = isSelected ? 1.0 : (isHovered ? 0.95 : 0.92)
           c.imageSmoothingEnabled = true
           c.imageSmoothingQuality = 'high'
-
-          if (isFlipped) {
-            c.translate(cx, 0)
-            c.scale(-1, 1)
-            c.drawImage(sheet, fx0, sy, sw, sh, -rW / 2, dy, rW, rH)
-          } else {
-            c.drawImage(sheet, fx0, sy, sw, sh, dx, dy, rW, rH)
-          }
+          c.drawImage(sheet, fx0, sy, sw, sh, ddx, ddy, rW, rH)
 
           if (isSelected) {
             c.globalAlpha = 0.4
             c.globalCompositeOperation = 'screen'
-            if (isFlipped) {
-              c.drawImage(sheet, fx0, sy, sw, sh, -rW / 2, dy, rW, rH)
-            } else {
-              c.drawImage(sheet, fx0, sy, sw, sh, dx, dy, rW, rH)
-            }
+            c.drawImage(sheet, fx0, sy, sw, sh, ddx, ddy, rW, rH)
             c.globalCompositeOperation = 'source-over'
           }
           c.restore()
