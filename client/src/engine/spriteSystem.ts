@@ -461,3 +461,117 @@ export function getFrameSprite(sprites: CharacterSprites, state: CharState, dir:
   if (state === 'idle') return sprites.idle[dir]
   return sprites.walk[dir][frame % 4]
 }
+
+// ── Occupation-based Character Palettes ─────────────────────────────────────
+// 10种深圳特色职业角色，每种有独特的颜色方案
+
+export type OccupationType =
+  | 'delivery_rider' | 'programmer' | 'urban_uncle' | 'electronics_vendor'
+  | 'white_collar' | 'startup_founder' | 'drifter' | 'square_dance_auntie'
+  | 'security_guard' | 'jogger' | 'default'
+
+export interface OccupationPalette extends CharPalette {
+  accent1?: string
+  accent2?: string
+  label: string
+}
+
+export const OCCUPATION_PALETTES: Record<OccupationType, OccupationPalette> = {
+  delivery_rider: {
+    skin: '#FFCC99', shirt: '#1A6FD4', pants: '#1A1A2E',
+    hair: '#FFD700', shoes: '#111111',
+    accent1: '#FFD700', accent2: '#FF6600', label: '外卖骑手'
+  },
+  programmer: {
+    skin: '#F0D0B0', shirt: '#2D2D3A', pants: '#1A1A2A',
+    hair: '#111111', shoes: '#222222',
+    accent1: '#4A90D9', accent2: '#8B6914', label: '程序员'
+  },
+  urban_uncle: {
+    skin: '#C8884A', shirt: '#F5F5F0', pants: '#3A5A7A',
+    hair: '#1A1A1A', shoes: '#8B7355',
+    accent1: '#CCCCCC', accent2: '#FFFFFF', label: '城中村大叔'
+  },
+  electronics_vendor: {
+    skin: '#FFCC99', shirt: '#2A5A2A', pants: '#1A2A1A',
+    hair: '#1A1A1A', shoes: '#222222',
+    accent1: '#C0C0C0', accent2: '#FFD700', label: '华强北商人'
+  },
+  white_collar: {
+    skin: '#FFCC99', shirt: '#1A1A3A', pants: '#0A0A1A',
+    hair: '#1A1A1A', shoes: '#0A0A0A',
+    accent1: '#C0C0C0', accent2: '#FFFFFF', label: '白领'
+  },
+  startup_founder: {
+    skin: '#FFCC99', shirt: '#4A7A9B', pants: '#2A3A4A',
+    hair: '#5A3A1A', shoes: '#8B8B8B',
+    accent1: '#C0C0C0', accent2: '#FF6B6B', label: '创业者'
+  },
+  drifter: {
+    skin: '#DEB887', shirt: '#8B7355', pants: '#5A4A3A',
+    hair: '#2A1A0A', shoes: '#4A3A2A',
+    accent1: '#6B4A2A', accent2: '#4CAF50', label: '深漂青年'
+  },
+  square_dance_auntie: {
+    skin: '#DEB887', shirt: '#FF69B4', pants: '#CC44AA',
+    hair: '#1A1A1A', shoes: '#FF1493',
+    accent1: '#FF69B4', accent2: '#333333', label: '广场舞大妈'
+  },
+  security_guard: {
+    skin: '#C8884A', shirt: '#2A3A5A', pants: '#1A2A3A',
+    hair: '#1A1A1A', shoes: '#1A1A1A',
+    accent1: '#2A3A5A', accent2: '#888888', label: '保安'
+  },
+  jogger: {
+    skin: '#FFCC99', shirt: '#CCFF00', pants: '#1A1A1A',
+    hair: '#1A1A1A', shoes: '#FF6600',
+    accent1: '#333333', accent2: '#CCFF00', label: '跑步者'
+  },
+  default: {
+    skin: '#FFCC99', shirt: '#4488CC', pants: '#334466',
+    hair: '#553322', shoes: '#222222',
+    accent1: '#FFFFFF', accent2: '#CCCCCC', label: '居民'
+  },
+}
+
+export function getOccupationPalette(occupation?: string): CharPalette {
+  const key = (occupation || 'default') as OccupationType
+  return OCCUPATION_PALETTES[key] ?? OCCUPATION_PALETTES.default
+}
+
+export function getOccupationLabel(occupation?: string): string {
+  const key = (occupation || 'default') as OccupationType
+  return (OCCUPATION_PALETTES[key] ?? OCCUPATION_PALETTES.default).label
+}
+
+// Occupation-based sprite cache (by occupation key)
+const occupationSpriteCache = new Map<string, CharacterSprites>()
+
+export function getOccupationSprites(occupation?: string): CharacterSprites {
+  const key = occupation || 'default'
+  const cached = occupationSpriteCache.get(key)
+  if (cached) return cached
+
+  const pal = getOccupationPalette(occupation)
+  const r = (t: TC[][]) => resolveTemplate(t, pal)
+  const rf = (t: TC[][]) => resolveTemplate(flipHorizontal(t), pal)
+
+  const sprites: CharacterSprites = {
+    walk: {
+      down:  [r(CHAR_WALK_DOWN_1),  r(CHAR_WALK_DOWN_2),  r(CHAR_WALK_DOWN_3),  r(CHAR_WALK_DOWN_2)],
+      up:    [r(CHAR_WALK_UP_1),    r(CHAR_WALK_UP_2),    r(CHAR_WALK_UP_3),    r(CHAR_WALK_UP_2)],
+      right: [r(CHAR_WALK_RIGHT_1), r(CHAR_WALK_RIGHT_2), r(CHAR_WALK_RIGHT_3), r(CHAR_WALK_RIGHT_2)],
+      left:  [rf(CHAR_WALK_RIGHT_1),rf(CHAR_WALK_RIGHT_2),rf(CHAR_WALK_RIGHT_3),rf(CHAR_WALK_RIGHT_2)],
+    },
+    idle: {
+      down:  r(CHAR_IDLE_DOWN),
+      up:    r(CHAR_WALK_UP_2),
+      right: r(CHAR_WALK_RIGHT_2),
+      left:  rf(CHAR_WALK_RIGHT_2),
+    },
+    sleep: r(CHAR_SLEEP),
+  }
+
+  occupationSpriteCache.set(key, sprites)
+  return sprites
+}

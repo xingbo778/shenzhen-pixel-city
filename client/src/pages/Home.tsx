@@ -9,6 +9,7 @@
 import { useState, useCallback, useRef, useEffect, memo, useMemo } from "react";
 import { useWorldData, sendMessage, setEngineUrl } from "@/hooks/useWorldData";
 import PixelCityMap from "@/components/PixelCityMap";
+import CityOverviewMap from "@/components/CityOverviewMap";
 import BotCard from "@/components/BotCard";
 import BotDetailPanel from "@/components/BotDetailPanel";
 import RightPanel from "@/components/RightPanel";
@@ -29,6 +30,9 @@ export default function Home() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [currentMapLocation, setCurrentMapLocation] = useState<string>('宝安城中村');
   const [showBotDetail, setShowBotDetail] = useState(false);
+  // Two-layer map: 'overview' = city overview, 'scene' = zoomed-in location
+  const [mapLayer, setMapLayer] = useState<'overview' | 'scene'>('overview');
+  const [zoomAnimating, setZoomAnimating] = useState(false);
 
   const handleBotClick = useCallback((botId: string) => {
     setSelectedBotId(botId);
@@ -39,6 +43,28 @@ export default function Home() {
     setSelectedLocation(location);
     setCurrentMapLocation(location);
     setShowBotDetail(false);
+  }, []);
+
+  // Handle overview map location click → zoom into scene
+  const handleOverviewLocationSelect = useCallback((locationKey: string) => {
+    // Map overview keys to scene config keys
+    const keyMap: Record<string, string> = {
+      'baoan_urban_village': '宝安城中村',
+      'nanshan_tech_park':   '南山科技园',
+      'futian_cbd':          '福田CBD',
+      'huaqiangbei':         '华强北',
+      'dongmen_oldstreet':   '东门老街',
+      'nanshan_apartments':  '南山公寓',
+      'shenzhen_bay_park':   '深圳湾公园',
+    };
+    const sceneName = keyMap[locationKey] || '宝安城中村';
+    setZoomAnimating(true);
+    setTimeout(() => {
+      setCurrentMapLocation(sceneName);
+      setSelectedLocation(sceneName);
+      setMapLayer('scene');
+      setZoomAnimating(false);
+    }, 350);
   }, []);
 
   const handleSendMessage = useCallback(async (botId: string, msg: string) => {
@@ -97,23 +123,67 @@ export default function Home() {
       {/* 主体区域 */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* 左侧：像素城市地图 */}
+        {/* 左侧：像素城市地图（两层：全景 ↔ 场景） */}
         <div
           className="relative"
           style={{
             width: "60%",
             borderRight: "1px solid rgba(77,150,255,0.12)",
+            overflow: "hidden",
           }}
         >
-          {/* 地图标题 */}
+          {/* 地图标题 + 层级指示 */}
           <div
             className="absolute top-2 left-3 z-10 flex items-center gap-2"
             style={{ pointerEvents: "none" }}
           >
             <span className="text-[9px] font-orbitron" style={{ color: "rgba(77,150,255,0.5)" }}>
-              PIXEL MAP · SHENZHEN
+              {mapLayer === 'overview' ? 'PIXEL MAP · SHENZHEN' : `SCENE · ${currentMapLocation.toUpperCase()}`}
             </span>
           </div>
+
+          {/* 场景层：返回全景按钮 */}
+          {mapLayer === 'scene' && (
+            <button
+              onClick={() => setMapLayer('overview')}
+              className="absolute top-2 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded text-[9px] font-orbitron"
+              style={{
+                background: "rgba(77,150,255,0.15)",
+                border: "1px solid rgba(77,150,255,0.35)",
+                color: "#4d96ff",
+                cursor: "pointer",
+              }}
+            >
+              ← 全城视图
+            </button>
+          )}
+
+          {/* 全景提示 */}
+          {mapLayer === 'overview' && (
+            <div
+              className="absolute bottom-3 left-1/2 z-10 text-[9px] font-orbitron"
+              style={{ transform: "translateX(-50%)", color: "rgba(77,150,255,0.45)", pointerEvents: "none" }}
+            >
+              点击地点进入场景
+            </div>
+          )}
+
+          {/* 缩放动画遮罩 */}
+          {zoomAnimating && (
+            <div
+              className="absolute inset-0 z-30"
+              style={{
+                background: "rgba(6,11,20,0.85)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div className="text-[11px] font-orbitron" style={{ color: "#4d96ff" }}>
+                进入 {currentMapLocation}...
+              </div>
+            </div>
+          )}
 
           {/* 加载状态 */}
           {isLoading && (
@@ -134,20 +204,35 @@ export default function Home() {
           {/* 错误提示 */}
           {!isConnected && !isLoading && (
             <div
-              className="absolute bottom-3 left-3 right-3 z-10 p-2 rounded text-[9px]"
+              className="absolute bottom-8 left-3 right-3 z-10 p-2 rounded text-[9px]"
               style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.3)", color: "#ff6b6b" }}
             >
               ⚠️ 无法连接到 world_engine ({engineUrl})。请确保 world_engine_v8.py 正在运行，或修改上方地址。
             </div>
           )}
 
-          <PixelCityMap
-            world={world}
-            selectedBotId={selectedBotId}
-            onBotClick={handleBotClick}
-            onLocationClick={handleLocationClick}
-            currentLocation={currentMapLocation}
-          />
+          {/* 全景层 - 条件渲染避免 canvas 重叠 */}
+          {mapLayer === 'overview' && (
+            <div style={{ position: "absolute", inset: 0 }}>
+              <CityOverviewMap
+                world={world}
+                onLocationSelect={handleOverviewLocationSelect}
+              />
+            </div>
+          )}
+
+          {/* 场景层 - 条件渲染 */}
+          {mapLayer === 'scene' && (
+            <div style={{ position: "absolute", inset: 0 }}>
+              <PixelCityMap
+                world={world}
+                selectedBotId={selectedBotId}
+                onBotClick={handleBotClick}
+                onLocationClick={handleLocationClick}
+                currentLocation={currentMapLocation}
+              />
+            </div>
+          )}
         </div>
 
         {/* 右侧面板 */}

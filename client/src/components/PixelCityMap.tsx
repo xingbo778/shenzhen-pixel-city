@@ -12,7 +12,7 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import type { WorldState } from '@/types/world'
 import { BOT_COLORS, getEmotionColor, getDominantEmotion } from '@/types/world'
 import {
-  getCachedSprite, getOutlineSprite, getCharacterSprites, getFrameSprite,
+  getCachedSprite, getOutlineSprite, getCharacterSprites, getOccupationSprites, getFrameSprite,
   type SpriteData, type Direction, type CharState
 } from '@/engine/spriteSystem'
 import { SCENE_CONFIGS, TILE_COLORS, type TileType } from '@/engine/sceneTiles'
@@ -33,6 +33,7 @@ interface BotRenderState {
   frame: number
   frameTimer: number
   paletteIndex: number
+  occupation?: string
   wanderTimer: number
   // Migration trail
   prevLocation?: string
@@ -302,6 +303,7 @@ export default function PixelCityMap({
           state: bot.is_sleeping ? 'sleep' : (isHere ? 'walk' : 'idle'),
           frame: 0, frameTimer: 0,
           paletteIndex: i % 10,
+          occupation: world?.bots[botId]?.occupation,
           wanderTimer: Math.random() * WANDER_INTERVAL,
           currentLocation: bot.location,
           trail: [{ x: sx, y: sy, alpha: 1.0 }],  // always track trail
@@ -494,7 +496,7 @@ export default function PixelCityMap({
         })
       }
 
-      const sprites = getCharacterSprites(bs.paletteIndex)
+      const sprites = bs.occupation ? getOccupationSprites(bs.occupation) : getCharacterSprites(bs.paletteIndex)
       const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
       const cached = getCachedSprite(spriteData, CHAR_ZOOM)
 
@@ -683,7 +685,7 @@ export default function PixelCityMap({
     for (const [botId, bs] of Object.entries(botStatesRef.current)) {
       const cx = offsetX + bs.x * ZOOM
       const cy = offsetY + bs.y * ZOOM
-      const sprites = getCharacterSprites(bs.paletteIndex)
+      const sprites = bs.occupation ? getOccupationSprites(bs.occupation) : getCharacterSprites(bs.paletteIndex)
       const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
       const cached = getCachedSprite(spriteData, CHAR_ZOOM)
       const bx = cx - cached.width / 2

@@ -67,6 +67,7 @@ export interface BotState {
   action_log: ActionLog[];
   generation: number;
   inherited_from: string | null;
+  occupation?: string;  // derived from job/role for sprite selection
 }
 
 export interface LocationNpc {
