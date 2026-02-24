@@ -45,36 +45,73 @@ const VEHICLE_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/sess
 // Row 0: fishing_boat (渔船), Row 1: cruise (观光游轮), Row 2: speedboat (快艇)
 const BOAT_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/PCdoQWwaXPLDGmXZ.png'
 
-const V_CELL = 64
-const V_COLS = 4  // frames per direction
+// Vehicle animation frame count for cycling
+const V_ANIM_FRAMES = 4
 
 // Boat cell dimensions (boats_sheet_v1.png is 2752x1536, 4 cols x 3 rows)
 const B_CELL_W = Math.round(2752 / 4)  // 688
 const B_CELL_H = Math.round(1536 / 3)  // 512
 
+// ── Precise frame coordinates for vehicles_sheet_v3.png (2752x1536) ─────────
+// 5 rows, each row 307px tall
+const V_ROW_H = 307
+// Each entry: [x_start, x_end] for each frame
+const VEHICLE_FRAMES: Record<string, { right: [number,number][], left: [number,number][], rowY: number }> = {
+  taxi: {
+    rowY: 0,
+    right: [[70,275],[414,619],[762,967],[1107,1312]],
+    left:  [[2145,2344],[2484,2682],[2145,2344],[2484,2682]], // 2-frame loop
+  },
+  huolala: {
+    rowY: 0,
+    right: [[1393,1725]],
+    left:  [[1725,2058]],
+  },
+  meituan: {
+    rowY: 307,
+    right: [[1422,1655],[1777,2004],[1422,1655],[1777,2004]],
+    left:  [[2156,2333],[2494,2672],[2156,2333],[2494,2672]],
+  },
+  sweeper: {
+    rowY: 614,
+    right: [[41,304],[384,648],[728,991],[1083,1336]],
+    left:  [[1424,1691],[1773,2040],[2191,2298],[2530,2637]],
+  },
+  shared_bike: {
+    rowY: 921,
+    right: [[51,292],[396,636],[741,980],[1160,1266]],
+    left:  [[1439,1680],[1784,2024],[2190,2298],[2529,2637]],
+  },
+  bus: {
+    rowY: 1228,
+    right: [[29,1364]],
+    left:  [[1794,2023]],
+  },
+}
+
 type VehicleType = 'shared_bike' | 'meituan' | 'sweeper' | 'taxi' | 'huolala' | 'bus' | 'fishing_boat' | 'cruise' | 'speedboat'
 
 interface VehicleConfig {
-  row: number
   scale: number
   speed: number       // normalized units per second
   frameRate: number   // frames per second
   zOffset: number     // z-sort offset relative to y
   isBoat?: boolean    // use boat spritesheet
+  boatRow?: number    // row in boat spritesheet
   cellW?: number
   cellH?: number
 }
 
 const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
-  shared_bike:  { row: 0, scale: 1.2, speed: 0.05, frameRate: 8,  zOffset: 0 },
-  meituan:      { row: 1, scale: 1.4, speed: 0.09, frameRate: 10, zOffset: 0 },
-  sweeper:      { row: 2, scale: 1.6, speed: 0.04, frameRate: 6,  zOffset: 0 },
-  taxi:         { row: 3, scale: 1.8, speed: 0.09, frameRate: 8,  zOffset: 0 },
-  huolala:      { row: 4, scale: 1.9, speed: 0.07, frameRate: 8,  zOffset: 0 },
-  bus:          { row: 5, scale: 2.2, speed: 0.05, frameRate: 6,  zOffset: 0 },
-  fishing_boat: { row: 0, scale: 0.10, speed: 0.025, frameRate: 4, zOffset: 0, isBoat: true, cellW: B_CELL_W, cellH: B_CELL_H },
-  cruise:       { row: 1, scale: 0.12, speed: 0.035, frameRate: 4, zOffset: 0, isBoat: true, cellW: B_CELL_W, cellH: B_CELL_H },
-  speedboat:    { row: 2, scale: 0.08, speed: 0.055, frameRate: 6, zOffset: 0, isBoat: true, cellW: B_CELL_W, cellH: B_CELL_H },
+  shared_bike:  { scale: 0.18, speed: 0.05, frameRate: 8,  zOffset: 0 },
+  meituan:      { scale: 0.20, speed: 0.09, frameRate: 10, zOffset: 0 },
+  sweeper:      { scale: 0.22, speed: 0.04, frameRate: 6,  zOffset: 0 },
+  taxi:         { scale: 0.22, speed: 0.09, frameRate: 8,  zOffset: 0 },
+  huolala:      { scale: 0.18, speed: 0.07, frameRate: 8,  zOffset: 0 },
+  bus:          { scale: 0.16, speed: 0.05, frameRate: 6,  zOffset: 0 },
+  fishing_boat: { scale: 0.10, speed: 0.025, frameRate: 4, zOffset: 0, isBoat: true, boatRow: 0, cellW: B_CELL_W, cellH: B_CELL_H },
+  cruise:       { scale: 0.12, speed: 0.035, frameRate: 4, zOffset: 0, isBoat: true, boatRow: 1, cellW: B_CELL_W, cellH: B_CELL_H },
+  speedboat:    { scale: 0.08, speed: 0.055, frameRate: 6, zOffset: 0, isBoat: true, boatRow: 2, cellW: B_CELL_W, cellH: B_CELL_H },
 }
 
 // ── Vehicle road lanes per scene ──────────────────────────────────────────
@@ -164,13 +201,27 @@ interface VehicleState {
   dir: 1 | -1
   frame: number
   frameTimer: number
-}
+}// ── Character spritesheet configuration ───────────────────────────────────────────
+// v3 sheets: precise frame coordinates extracted from actual sprite images
+// chars_sheet1_v3.png: 2752x1536, 3 rows x 512px each
+// chars_sheet2_v3.png: 2752x1536, 4 rows x 384px each
 
-// ── Character spritesheet configuration ─────────────────────────────────────
-// v3 sheets: each cell is 196x153px, 6 cols (idle + 5 walk frames), 5 rows per sheet
-const SHEET_CELL_W = 196
-const SHEET_CELL_H = 153
-const SHEET_COLS = 6
+// Precise frame x-coordinates for each character row
+// Format: [[x0,x1], [x0,x1], ...] for each animation frame
+const CHAR_FRAME_COORDS: Record<string, { sheet: 1|2; rowY: number; rowH: number; frames: [number,number][] }> = {
+  // chars_sheet1_v3.png rows (row height = 512px)
+  '外卖骑手': { sheet: 1, rowY: 0,    rowH: 512, frames: [[68,270],[426,619],[734,957],[1102,1324],[68,270],[426,619]] },
+  '程序员':   { sheet: 1, rowY: 0,    rowH: 512, frames: [[1457,1645],[1806,1989],[2133,2331],[2483,2676],[1457,1645],[1806,1989]] },
+  '城中村大叔': { sheet: 1, rowY: 512,  rowH: 512, frames: [[52,309],[420,607],[753,955],[1097,1294],[52,309],[420,607]] },
+  '华强北商人': { sheet: 1, rowY: 512,  rowH: 512, frames: [[1414,1678],[1754,2018],[2121,2350],[2472,2677],[1414,1678],[1754,2018]] },
+  '白领':     { sheet: 1, rowY: 1024, rowH: 512, frames: [[75,268],[431,607],[757,950],[1095,1295],[75,268],[431,607]] },
+  // chars_sheet2_v3.png rows (row height = 384px)
+  '创业者':   { sheet: 2, rowY: 0,    rowH: 384, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
+  '深漂青年': { sheet: 2, rowY: 384,  rowH: 384, frames: [[70,206],[344,482],[592,762],[866,1036],[1158,1329],[1439,1582]] },
+  '广场舞大妈': { sheet: 2, rowY: 768,  rowH: 384, frames: [[61,210],[336,486],[623,762],[892,1037],[1156,1298],[1441,1580]] },
+  '保安':     { sheet: 2, rowY: 1152, rowH: 384, frames: [[63,213],[339,487],[614,762],[894,1036],[1439,1582],[1710,1858]] },
+  '跑步者':   { sheet: 1, rowY: 1024, rowH: 512, frames: [[1450,1634],[1806,1978],[2133,2321],[2478,2654],[1450,1634],[1806,1978]] },
+}
 
 interface SpriteConfig {
   sheet: 1 | 2
@@ -180,30 +231,33 @@ interface SpriteConfig {
   offsetY: number
 }
 
+// Legacy configs (kept for fallback, but rendering now uses CHAR_FRAME_COORDS)
 const SPRITE_CONFIGS: Record<string, SpriteConfig> = {
-  '外卖骑手':   { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 },
-  '程序员':     { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '城中村大叔': { sheet: 1, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '华强北商人': { sheet: 1, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '白领':       { sheet: 1, row: 4, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '创业者':     { sheet: 2, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '深漂青年':   { sheet: 2, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '广场舞大妈': { sheet: 2, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '保安':       { sheet: 2, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  '跑步者':     { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 },
+  '外卖骑手':   { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.85 },
+  '程序员':     { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '城中村大叔': { sheet: 1, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '华强北商人': { sheet: 1, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '白领':       { sheet: 1, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '创业者':     { sheet: 2, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '深漂青年':   { sheet: 2, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '广场舞大妈': { sheet: 2, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '保安':       { sheet: 2, row: 3, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  '跑步者':     { sheet: 1, row: 2, frameCount: 6, scale: 0.60, offsetY: 0.90 },
 }
 
+const FALLBACK_OCCUPATIONS = ['创业者', '白领', '深漂青年', '程序员', '保安', '华强北商人', '广场舞大妈', '城中村大叔', '跑步者', '外卖骑手']
+
 const FALLBACK_CONFIGS: SpriteConfig[] = [
-  { sheet: 2, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 4, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 1, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
-  { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 },
-  { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 },
+  { sheet: 2, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 3, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 1, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 2, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 6, scale: 0.60, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 6, scale: 0.55, offsetY: 0.85 },
 ]
 
 // ── Walkable zones per scene ──────────────────────────────────────────────
@@ -364,7 +418,7 @@ function initVehicles(location: string, botCount: number): VehicleState[] {
         x: Math.max(lane.xMin, Math.min(lane.xMax, x)),
         y: lane.y,
         dir: lane.dir,
-        frame: Math.floor(Math.random() * V_COLS),
+        frame: Math.floor(Math.random() * V_ANIM_FRAMES),
         frameTimer: Math.random() * (1 / config.frameRate),
       })
     }
@@ -388,10 +442,9 @@ function drawVehicle(
     
     const cellW = config.cellW!
     const cellH = config.cellH!
-    const frameCol = v.frame % V_COLS
-    // For boats: cols 0-3 right, cols 0-3 left (flip horizontally)
+    const frameCol = v.frame % 4
     const sx = frameCol * cellW
-    const sy = config.row * cellH
+    const sy = (config.boatRow ?? 0) * cellH
     
     const renderW = Math.round(cellW * config.scale)
     const renderH = Math.round(cellH * config.scale)
@@ -404,7 +457,6 @@ function drawVehicle(
     ctx.imageSmoothingQuality = 'high'
     
     if (v.dir === -1) {
-      // Flip horizontally
       ctx.translate(cx, 0)
       ctx.scale(-1, 1)
       ctx.drawImage(sheet, sx, sy, cellW, cellH, -renderW / 2, cy - renderH * 0.6, renderW, renderH)
@@ -413,30 +465,35 @@ function drawVehicle(
     }
     ctx.restore()
   } else {
-    // Use vehicle spritesheet
+    // Use vehicle spritesheet with precise frame coordinates
     const sheet = imageCache[VEHICLE_SHEET_URL]
     if (!sheet || !imageLoaded[VEHICLE_SHEET_URL]) return
     
-    const frameCol = v.frame % V_COLS
-    // Cols 0-3: right, Cols 4-7: left
-    const sheetCol = v.dir === 1 ? frameCol : frameCol + V_COLS
+    const vFrames = VEHICLE_FRAMES[v.type]
+    if (!vFrames) return
     
-    const sx = sheetCol * V_CELL
-    const sy = config.row * V_CELL
+    const dirFrames = v.dir === 1 ? vFrames.right : vFrames.left
+    const frameIdx = v.frame % dirFrames.length
+    const [x0, x1] = dirFrames[frameIdx]
+    const sw = x1 - x0
+    const sh = V_ROW_H
+    const sy = vFrames.rowY
     
-    const renderW = Math.round(V_CELL * config.scale)
-    const renderH = Math.round(V_CELL * config.scale)
+    // Scale: render height = sh * scale, keep aspect ratio
+    const renderH = Math.round(sh * config.scale)
+    const renderW = Math.round(sw * config.scale)
     
     const cx = imgDrawX + v.x * imgDrawW
     const cy = imgDrawY + v.y * imgDrawH
     
     ctx.save()
-    ctx.imageSmoothingEnabled = false
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(
       sheet,
-      sx, sy, V_CELL, V_CELL,
+      x0, sy, sw, sh,
       cx - renderW / 2,
-      cy - renderH * 0.75,
+      cy - renderH * 0.85,
       renderW, renderH
     )
     ctx.restore()
@@ -640,7 +697,7 @@ export default function PixelCityMap({
       const frameDuration = 1 / config.frameRate
       if (v.frameTimer >= frameDuration) {
         v.frameTimer -= frameDuration
-        v.frame = (v.frame + 1) % V_COLS
+        v.frame = (v.frame + 1) % V_ANIM_FRAMES
       }
       
       // Move along lane
@@ -667,7 +724,7 @@ export default function PixelCityMap({
           draw: (c) => {
             c.save()
             c.beginPath()
-            c.ellipse(vCx, vCy + 2, V_CELL * vConfig.scale * 0.4, V_CELL * vConfig.scale * 0.12, 0, 0, Math.PI * 2)
+            c.ellipse(vCx, vCy + 2, 30 * vConfig.scale, 10 * vConfig.scale, 0, 0, Math.PI * 2)
             c.fillStyle = 'rgba(0,0,0,0.25)'
             c.fill()
             c.restore()
@@ -756,9 +813,21 @@ export default function PixelCityMap({
         })
       }
 
+      // Use precise frame coords if available, else fall back to legacy
+      const occ = bs.occupation || FALLBACK_OCCUPATIONS[bs.paletteIndex % FALLBACK_OCCUPATIONS.length]
+      const charCoords = CHAR_FRAME_COORDS[occ]
       const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
-      const renderW = Math.round(SHEET_CELL_W * config.scale)
-      const renderH = Math.round(SHEET_CELL_H * config.scale)
+      
+      // Determine render size from actual frame dimensions
+      let frameW = 200, frameH = 512
+      if (charCoords) {
+        const fi = bs.frame % charCoords.frames.length
+        const [fx0, fx1] = charCoords.frames[fi]
+        frameW = fx1 - fx0
+        frameH = charCoords.rowH
+      }
+      const renderH = Math.round(frameH * config.scale)
+      const renderW = Math.round(frameW * config.scale)
       const cx = imgDrawX + bs.x * imgDrawW
       const cy = imgDrawY + bs.y * imgDrawH
       const zY = cy
@@ -813,11 +882,21 @@ export default function PixelCityMap({
         })
       }
 
-      const walkFrame = bs.state === 'idle' ? 0 : (bs.frame % 5) + 1
+      const walkFrameIdx = bs.state === 'idle' ? 0 : bs.frame % (charCoords ? charCoords.frames.length : 6)
       drawables.push({
         zY,
         draw: (c) => {
-          const sheetUrl = config.sheet === 1 ? CHARS_SHEET1_URL : CHARS_SHEET2_URL
+          if (!charCoords) {
+            // Fallback: draw colored circle
+            c.save()
+            c.beginPath()
+            c.arc(cx, cy - renderH * 0.5, renderW * 0.3, 0, Math.PI * 2)
+            c.fillStyle = BOT_COLORS[botId] || '#4d96ff'
+            c.fill()
+            c.restore()
+            return
+          }
+          const sheetUrl = charCoords.sheet === 1 ? CHARS_SHEET1_URL : CHARS_SHEET2_URL
           const sheet = imageCache[sheetUrl]
           if (!sheet || !imageLoaded[sheetUrl]) {
             c.save()
@@ -829,31 +908,36 @@ export default function PixelCityMap({
             return
           }
 
-          const col = Math.min(walkFrame, SHEET_COLS - 1)
-          const sx = col * SHEET_CELL_W
-          const sy = config.row * SHEET_CELL_H
-          const dx = cx - renderW / 2
-          const dy = cy - renderH * config.offsetY
+          const fi = walkFrameIdx % charCoords.frames.length
+          const [fx0, fx1] = charCoords.frames[fi]
+          const sw = fx1 - fx0
+          const sh = charCoords.rowH
+          const sy = charCoords.rowY
+          const rW = Math.round(sw * config.scale)
+          const rH = Math.round(sh * config.scale)
+          const dx = cx - rW / 2
+          const dy = cy - rH * config.offsetY
 
           c.save()
           c.globalAlpha = isSelected ? 1.0 : (isHovered ? 0.95 : 0.92)
-          c.imageSmoothingEnabled = false
+          c.imageSmoothingEnabled = true
+          c.imageSmoothingQuality = 'high'
 
           if (isFlipped) {
             c.translate(cx, 0)
             c.scale(-1, 1)
-            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, -renderW / 2, dy, renderW, renderH)
+            c.drawImage(sheet, fx0, sy, sw, sh, -rW / 2, dy, rW, rH)
           } else {
-            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, dx, dy, renderW, renderH)
+            c.drawImage(sheet, fx0, sy, sw, sh, dx, dy, rW, rH)
           }
 
           if (isSelected) {
             c.globalAlpha = 0.4
             c.globalCompositeOperation = 'screen'
             if (isFlipped) {
-              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, -renderW / 2, dy, renderW, renderH)
+              c.drawImage(sheet, fx0, sy, sw, sh, -rW / 2, dy, rW, rH)
             } else {
-              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, dx, dy, renderW, renderH)
+              c.drawImage(sheet, fx0, sy, sw, sh, dx, dy, rW, rH)
             }
             c.globalCompositeOperation = 'source-over'
           }
@@ -907,7 +991,10 @@ export default function PixelCityMap({
       const bs = botStatesRef.current[bubble.botId]
       if (!bs) return
       const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
-      const renderH = Math.round(SHEET_CELL_H * config.scale)
+      const bsOcc = bs.occupation || FALLBACK_OCCUPATIONS[bs.paletteIndex % FALLBACK_OCCUPATIONS.length]
+      const bsCoords = CHAR_FRAME_COORDS[bsOcc]
+      const bsFrameH = bsCoords ? bsCoords.rowH : 512
+      const renderH = Math.round(bsFrameH * config.scale)
       const bx = imgDrawX + bs.x * imgDrawW
       const by = imgDrawY + bs.y * imgDrawH - renderH * config.offsetY - 30
 
@@ -1025,8 +1112,12 @@ export default function PixelCityMap({
 
     for (const [botId, bs] of Object.entries(botStatesRef.current)) {
       const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
-      const renderW = Math.round(SHEET_CELL_W * config.scale)
-      const renderH = Math.round(SHEET_CELL_H * config.scale)
+      const htOcc = bs.occupation || FALLBACK_OCCUPATIONS[bs.paletteIndex % FALLBACK_OCCUPATIONS.length]
+      const htCoords = CHAR_FRAME_COORDS[htOcc]
+      const htFrameW = htCoords ? (htCoords.frames[0][1] - htCoords.frames[0][0]) : 200
+      const htFrameH = htCoords ? htCoords.rowH : 512
+      const renderW = Math.round(htFrameW * config.scale)
+      const renderH = Math.round(htFrameH * config.scale)
       const cx = imgDrawX + bs.x * imgDrawW
       const cy = imgDrawY + bs.y * imgDrawH
       const bx = cx - renderW / 2
@@ -1125,7 +1216,7 @@ export default function PixelCityMap({
         onTouchEnd={() => { touchStartRef.current = null }}
       />
       {/* Location selector tabs */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 flex-wrap justify-center max-w-full px-2">
+      <div className="absolute bottom-3 left-0 right-0 flex gap-1 justify-center overflow-x-auto px-2 pb-0.5" style={{scrollbarWidth:'none'}}>
         {SCENE_NAMES.map(loc => (
           <button
             key={loc}
