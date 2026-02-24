@@ -40,77 +40,59 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* 深圳城市主题色 */
+  --sz-bg: #060b14;
+  --sz-panel: #0d1a2e;
+  --sz-panel2: #0f2040;
+  --sz-border: rgba(77, 150, 255, 0.18);
+  --sz-blue: #4d96ff;
+  --sz-green: #6bcb77;
+  --sz-red: #ff6b6b;
+  --sz-yellow: #ffd93d;
+  --sz-purple: #c77dff;
+  --sz-cyan: #00f5ff;
+  --sz-orange: #ff9f43;
+  --sz-text: #c8d8f0;
+  --sz-text-dim: #5a7a9a;
+  --sz-glow-blue: 0 0 8px rgba(77, 150, 255, 0.6);
+  --sz-glow-green: 0 0 8px rgba(107, 203, 119, 0.6);
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
-}
-
-.dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --radius: 0.4rem;
+  --background: oklch(0.06 0.02 240);
+  --foreground: oklch(0.85 0.03 220);
+  --card: oklch(0.1 0.025 240);
+  --card-foreground: oklch(0.85 0.03 220);
+  --popover: oklch(0.1 0.025 240);
+  --popover-foreground: oklch(0.85 0.03 220);
+  --primary: oklch(0.62 0.18 240);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.15 0.02 240);
+  --secondary-foreground: oklch(0.7 0.03 220);
+  --muted: oklch(0.15 0.02 240);
+  --muted-foreground: oklch(0.5 0.03 220);
+  --accent: oklch(0.18 0.03 240);
+  --accent-foreground: oklch(0.85 0.03 220);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.25 0.04 240);
+  --input: oklch(0.18 0.03 240);
+  --ring: oklch(0.62 0.18 240);
+  --chart-1: oklch(0.62 0.18 240);
+  --chart-2: oklch(0.65 0.15 150);
+  --chart-3: oklch(0.7 0.18 60);
+  --chart-4: oklch(0.65 0.2 300);
+  --chart-5: oklch(0.65 0.2 25);
+  --sidebar: oklch(0.1 0.025 240);
+  --sidebar-foreground: oklch(0.85 0.03 220);
+  --sidebar-primary: oklch(0.62 0.18 240);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.15 0.02 240);
+  --sidebar-accent-foreground: oklch(0.85 0.03 220);
+  --sidebar-border: oklch(0.25 0.04 240);
+  --sidebar-ring: oklch(0.62 0.18 240);
 }
 
 @layer base {
@@ -119,6 +101,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Noto Sans SC', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    background: var(--sz-bg);
+    color: var(--sz-text);
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -126,52 +113,126 @@
   [type="submit"]:not(:disabled),
   [type="reset"]:not(:disabled),
   a[href],
-  select:not(:disabled),
-  input[type="checkbox"]:not(:disabled),
-  input[type="radio"]:not(:disabled) {
+  select:not(:disabled) {
     @apply cursor-pointer;
   }
 }
 
+/* ===== 科技感边框装饰 ===== */
+.tech-border {
+  border: 1px solid var(--sz-border);
+  position: relative;
+}
+.tech-border::before,
+.tech-border::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--sz-blue);
+  border-style: solid;
+}
+.tech-border::before {
+  top: -1px; left: -1px;
+  border-width: 2px 0 0 2px;
+}
+.tech-border::after {
+  bottom: -1px; right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+/* ===== 扫描线效果 ===== */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ===== 霓虹发光文字 ===== */
+.neon-blue {
+  color: var(--sz-blue);
+  text-shadow: 0 0 8px rgba(77, 150, 255, 0.8);
+}
+.neon-green {
+  color: var(--sz-green);
+  text-shadow: 0 0 8px rgba(107, 203, 119, 0.8);
+}
+.neon-red {
+  color: var(--sz-red);
+  text-shadow: 0 0 8px rgba(255, 107, 107, 0.8);
+}
+.neon-yellow {
+  color: var(--sz-yellow);
+  text-shadow: 0 0 8px rgba(255, 217, 61, 0.8);
+}
+.neon-purple {
+  color: var(--sz-purple);
+  text-shadow: 0 0 8px rgba(199, 125, 255, 0.8);
+}
+
+/* ===== 字体 ===== */
+.font-orbitron { font-family: 'Orbitron', sans-serif; }
+.font-mono-data { font-family: 'JetBrains Mono', monospace; }
+.font-cn { font-family: 'Noto Sans SC', sans-serif; }
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: rgba(77, 150, 255, 0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(77, 150, 255, 0.6); }
+
+/* ===== 动画 ===== */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-in-bottom {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes float-zzz {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-20px) scale(0.7); }
+}
+@keyframes number-flash {
+  0%, 100% { color: inherit; }
+  50% { color: var(--sz-yellow); }
+}
+
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+.animate-ticker { animation: ticker-scroll 40s linear infinite; }
+.animate-slide-right { animation: slide-in-right 0.3s ease-out; }
+.animate-slide-bottom { animation: slide-in-bottom 0.3s ease-out; }
+.animate-float-zzz { animation: float-zzz 2s ease-out infinite; }
+.animate-number-flash { animation: number-flash 0.5s ease-in-out; }
+
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
-
   .flex {
     min-height: 0;
     min-width: 0;
-  }
-
-  @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem; /* 32px - desktop padding */
-      padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
-    }
   }
 }
