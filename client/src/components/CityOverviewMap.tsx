@@ -12,7 +12,7 @@ import type { WorldState } from '@/types/world'
 import { BOT_COLORS } from '@/types/world'
 
 // CDN URLs for scene images (uploaded via manus-upload-file)
-const OVERVIEW_MAP_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/lWxSeVupnykEUilP.jpg'
+const OVERVIEW_MAP_URL = '/scenes/overview.jpg'
 
 // Location hit regions on the overview map image
 // The overview map image is 1456x816, these are normalized (0-1) bounding boxes [x, y, w, h]

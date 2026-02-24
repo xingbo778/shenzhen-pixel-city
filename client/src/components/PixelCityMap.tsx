@@ -18,13 +18,13 @@ import {
 
 // ── Scene background images (CDN URLs) ─────────────────────────────────
 const SCENE_IMAGES: Record<string, string> = {
-  '宝安城中村':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/TUQKuaBsexENfibx.jpg',
-  '南山科技园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/AMXWXYfAokXxzjkh.jpg',
-  '福田CBD':     'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/AMXWXYfAokXxzjkh.jpg',
-  '华强北':      'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/MXLjKRWmMkhYmuLS.jpg',
-  '东门老街':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/YknUPCWZKSgNaPvP.jpg',
-  '南山公寓':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/WOckFGRbzpNWtLfq.jpg',
-  '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/kIszORrRcoRjttLM.jpg',
+  '宝安城中村':  '/scenes/scene_chengzhongcun.jpg',
+  '南山科技园':  '/scenes/scene_techpark.jpg',
+  '福田CBD':     '/scenes/scene_techpark.jpg',
+  '华强北':      '/scenes/scene_huaqiangbei.jpg',
+  '东门老街':    '/scenes/scene_dongmen.jpg',
+  '南山公寓':    '/scenes/scene_apartments.jpg',
+  '深圳湾公园':  '/scenes/scene_baypark.jpg',
 }
 
 // ── Walkable zones per scene (normalized 0-1 relative to scene image) ─
