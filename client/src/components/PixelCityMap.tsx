@@ -18,11 +18,11 @@ import {
 import { SCENE_CONFIGS, TILE_COLORS, type TileType } from '@/engine/sceneTiles'
 
 const TILE_SIZE = 16   // pixels per tile (logical)
-const ZOOM = 3         // pixel scale factor (like pixel-agents zoom)
-const CHAR_ZOOM = 4    // character sprite zoom (larger than tiles for visibility)
-const CHAR_WALK_SPEED = 0.08  // tiles per frame (smoother)
-const WALK_FRAME_DURATION = 0.15  // seconds per walk frame
-const WANDER_INTERVAL = 3.5  // seconds between wander target updates
+const ZOOM = 2.5       // pixel scale factor - smaller zoom shows more of the map
+const CHAR_ZOOM = 3.5  // character sprite zoom
+const CHAR_WALK_SPEED = 0.06  // tiles per frame
+const WALK_FRAME_DURATION = 0.14  // seconds per walk frame
+const WANDER_INTERVAL = 4.0  // seconds between wander target updates
 
 interface BotRenderState {
   x: number; y: number        // current pixel pos (logical)
@@ -134,7 +134,7 @@ function drawTilemap(
           ctx.fillStyle = tc.line!
           ctx.fillRect(x, y + s - 2, s, 2)
         }
-      } else if (tile === 'grass' || tile === 'grass_dark') {
+      } else if (tile === 'grass' || tile === 'grass_lush') {
         // Grass with subtle texture
         ctx.fillStyle = tc.detail!
         if ((r + c) % 3 === 0) ctx.fillRect(x + 2, y + 2, 2, 2)
@@ -151,18 +151,7 @@ function drawTilemap(
           ctx.fillStyle = tc.line!
           ctx.fillRect(x, y, s, 2)
         }
-      } else if (tile === 'tile_checker') {
-        // Checker pattern
-        if ((r + c) % 2 === 1) {
-          ctx.fillStyle = tc.detail!
-          ctx.fillRect(x, y, s, s)
-        }
-      } else if (tile === 'tile_floor') {
-        // Floor tiles with grout lines
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, s, 1)
-        ctx.fillRect(x, y, 1, s)
-      } else if (tile === 'plaza') {
+      } else if (tile === 'tile_plaza') {
         // Plaza with decorative pattern
         ctx.fillStyle = tc.detail!
         ctx.fillRect(x, y, s, 1)
@@ -171,6 +160,22 @@ function drawTilemap(
           ctx.fillStyle = tc.line!
           ctx.fillRect(x + Math.floor(s/2) - 1, y + Math.floor(s/2) - 1, 2, 2)
         }
+      } else if (tile === 'fence_green') {
+        // Green fence strip
+        ctx.fillStyle = '#1A4A10'
+        ctx.fillRect(x, y, s, 2)
+        ctx.fillRect(x, y + s - 2, s, 2)
+        ctx.fillStyle = '#2A6A20'
+        if (c % 2 === 0) ctx.fillRect(x + Math.floor(s/2) - 1, y + 2, 2, s - 4)
+      } else if (tile === 'alley') {
+        // Narrow alley
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, s, 1)
+        ctx.fillRect(x, y, 1, s)
+      } else if (tile === 'concrete') {
+        // Concrete with subtle cracks
+        ctx.fillStyle = tc.detail!
+        if ((r * 3 + c * 7) % 11 === 0) ctx.fillRect(x + 3, y + 3, s - 6, 1)
       } else if (tile === 'park_path') {
         // Park path with edge detail
         ctx.fillStyle = tc.detail!
@@ -198,9 +203,9 @@ function lightenHex(hex: string, amount: number): string {
 
 // ── Walkable tile check (bots can walk on roads, sidewalks, plazas, grass, paths) ───
 const WALKABLE_TILES = new Set<TileType>([
-  'road_h', 'road_v', 'road_cross', 'road_tl', 'road_tr', 'road_bl', 'road_br',
-  'sidewalk', 'sidewalk_edge', 'grass', 'grass_dark', 'concrete',
-  'tile_floor', 'tile_checker', 'park_path', 'plaza', 'sand',
+  'road_h', 'road_v', 'road_cross',
+  'sidewalk', 'sidewalk_edge', 'grass', 'grass_lush', 'concrete',
+  'tile_plaza', 'park_path', 'fence_green',
 ])
 
 function getWalkableTiles(tilemap: TileType[][]): { col: number; row: number }[] {
@@ -365,11 +370,12 @@ export default function PixelCityMap({
     ctx.fillStyle = '#060b14'
     ctx.fillRect(0, 0, cssW, cssH)
 
-    // ── Scene offset: center the tile grid ──────────────────────
+    // ── Scene offset: align top, center horizontally ─────────────
     const sceneW = scene.cols * TILE_SIZE * ZOOM
     const sceneH = scene.rows * TILE_SIZE * ZOOM
     const offsetX = Math.floor((cssW - sceneW) / 2)
-    const offsetY = Math.floor((cssH - sceneH) / 2)
+    // Start from top so buildings are visible; if scene is shorter than canvas, center vertically
+    const offsetY = sceneH < cssH ? Math.floor((cssH - sceneH) / 2) : 0
 
     // ── Tilemap (pixel-agents renderTileGrid style) ────────────
     drawTilemap(ctx, scene.tilemap, offsetX, offsetY, ZOOM, timestamp / 1000)
