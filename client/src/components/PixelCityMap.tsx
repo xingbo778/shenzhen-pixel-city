@@ -1,11 +1,13 @@
 /**
  * PixelCityMap - 深圳像素城市场景视图
- * 使用设计图作为背景底图，真实角色精灵图在上层行走
  *
- * 设计哲学：高质量像素艺术场景 + 真实精灵图角色
- * - 每个场景用对应的设计图作为背景
- * - 角色使用 szpc_chars_sheet1/2.png 中的真实精灵
- * - 可步行区域基于设计图视觉分析精确定义
+ * 渲染层次（从下到上）：
+ * 1. 背景层：场景设计图（建筑、树木、地面）
+ * 2. 可动元素层：单车、摩托车、轿车、出租车、船只、公交车（vehicles_sheet.png）
+ * 3. Bot角色层：人物精灵（szpc_chars_sheet1/2.png）
+ * 4. UI层：名字标签、情绪气泡、选中圆圈
+ *
+ * 大地图：地图尺寸为视口2倍，可拖拽平移，随Bot数量自动扩展可步行区域
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react'
@@ -23,25 +25,129 @@ const SCENE_IMAGES: Record<string, string> = {
   '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/qMkeoTdcqlLTdfUU.jpg',
 }
 
-// ── Spritesheet configuration ────────────────────────────────────────────
-// Sheet1 (szpc_chars_sheet1.png): 外卖骑手(0), 程序员(1), 城中村大叔(2), 华强北商人(3), 白领(4)
-// Sheet2 (szpc_chars_sheet2.png): 创业者(0), 深漂青年(1), 广场舞大妈(2), 保安(3), 跑步者(4)
-// Each sheet: 1376x768, 7 cols x 5 rows, cell = 196x153px
-// Cols 0-5: animation frames (0=idle, 1-5=walk), Col 6: portrait (skip)
+// ── Vehicle spritesheet ───────────────────────────────────────────────────
+// vehicles_sheet.png: 512x384, 8 cols x 6 rows, each cell 64x64
+// Cols 0-3: facing right (frames 0-3), Cols 4-7: facing left (mirrored, frames 0-3)
+// Rows: 0=bicycle, 1=moto_delivery, 2=car_red, 3=taxi, 4=boat, 5=bus
+const VEHICLE_SHEET_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/PdIOwZOVEteFseeO.png'
+const V_CELL = 64
+const V_COLS = 4  // frames per direction
+const V_ROWS = 6
 
-const SHEET_CELL_W = 196   // 1376 / 7
-const SHEET_CELL_H = 153   // 768 / 5
-const SHEET_COLS = 6       // usable animation frames per character
+type VehicleType = 'bicycle' | 'moto' | 'car' | 'taxi' | 'boat' | 'bus'
+
+interface VehicleConfig {
+  row: number
+  scale: number
+  speed: number       // normalized units per second
+  frameRate: number   // frames per second
+  zOffset: number     // z-sort offset relative to y
+}
+
+const VEHICLE_CONFIGS: Record<VehicleType, VehicleConfig> = {
+  bicycle:  { row: 0, scale: 1.4, speed: 0.06, frameRate: 8,  zOffset: 0 },
+  moto:     { row: 1, scale: 1.5, speed: 0.10, frameRate: 10, zOffset: 0 },
+  car:      { row: 2, scale: 1.8, speed: 0.08, frameRate: 8,  zOffset: 0 },
+  taxi:     { row: 3, scale: 1.8, speed: 0.09, frameRate: 8,  zOffset: 0 },
+  boat:     { row: 4, scale: 2.0, speed: 0.04, frameRate: 4,  zOffset: 0 },
+  bus:      { row: 5, scale: 2.2, speed: 0.05, frameRate: 6,  zOffset: 0 },
+}
+
+// ── Vehicle road lanes per scene ──────────────────────────────────────────
+// Each lane: { type, y (normalized), xMin, xMax, dir: 1=right/-1=left }
+interface VehicleLane {
+  type: VehicleType
+  y: number       // normalized y position of lane center
+  xMin: number    // patrol range
+  xMax: number
+  dir: 1 | -1
+}
+
+const SCENE_VEHICLE_LANES: Record<string, VehicleLane[]> = {
+  '宝安城中村': [
+    { type: 'bicycle', y: 0.35, xMin: 0.05, xMax: 0.90, dir: 1 },
+    { type: 'bicycle', y: 0.62, xMin: 0.05, xMax: 0.90, dir: -1 },
+    { type: 'moto',    y: 0.35, xMin: 0.05, xMax: 0.90, dir: -1 },
+    { type: 'moto',    y: 0.62, xMin: 0.05, xMax: 0.90, dir: 1 },
+    { type: 'bicycle', y: 0.50, xMin: 0.10, xMax: 0.50, dir: 1 },
+    { type: 'bicycle', y: 0.50, xMin: 0.50, xMax: 0.90, dir: -1 },
+  ],
+  '南山科技园': [
+    { type: 'bicycle', y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'bicycle', y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'moto',    y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'car',     y: 0.80, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',    y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bus',     y: 0.85, xMin: 0.05, xMax: 0.95, dir: 1 },
+  ],
+  '福田CBD': [
+    { type: 'car',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'car',     y: 0.60, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'taxi',    y: 0.65, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'taxi',    y: 0.70, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bus',     y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'moto',    y: 0.55, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'bicycle', y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+  ],
+  '华强北': [
+    { type: 'moto',    y: 0.30, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'moto',    y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bicycle', y: 0.50, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'bicycle', y: 0.50, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'moto',    y: 0.70, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'car',     y: 0.85, xMin: 0.05, xMax: 0.95, dir: -1 },
+  ],
+  '东门老街': [
+    { type: 'bicycle', y: 0.30, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'bicycle', y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'moto',    y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bicycle', y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'moto',    y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+  ],
+  '南山公寓': [
+    { type: 'car',     y: 0.50, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'car',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'bicycle', y: 0.60, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'moto',    y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'taxi',    y: 0.75, xMin: 0.05, xMax: 0.95, dir: 1 },
+    { type: 'bus',     y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
+  ],
+  '深圳湾公园': [
+    { type: 'bicycle', y: 0.32, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'bicycle', y: 0.32, xMin: 0.02, xMax: 0.98, dir: -1 },
+    { type: 'bicycle', y: 0.36, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'boat',    y: 0.70, xMin: 0.02, xMax: 0.98, dir: 1 },
+    { type: 'boat',    y: 0.75, xMin: 0.02, xMax: 0.98, dir: -1 },
+    { type: 'boat',    y: 0.80, xMin: 0.02, xMax: 0.98, dir: 1 },
+  ],
+}
+
+// ── Vehicle instance state ────────────────────────────────────────────────
+interface VehicleState {
+  id: string
+  type: VehicleType
+  lane: VehicleLane
+  x: number         // normalized x
+  y: number         // normalized y (from lane)
+  dir: 1 | -1
+  frame: number
+  frameTimer: number
+  // For large map: wrap around
+}
+
+// ── Spritesheet configuration ────────────────────────────────────────────
+const SHEET_CELL_W = 196
+const SHEET_CELL_H = 153
+const SHEET_COLS = 6
 
 interface SpriteConfig {
   sheet: 1 | 2
   row: number
-  frameCount: number   // number of walk frames (cols 1..frameCount)
-  scale: number        // render scale
-  offsetY: number      // vertical offset to align feet to anchor point (0-1 of cell height)
+  frameCount: number
+  scale: number
+  offsetY: number
 }
 
-// Map occupation/role → spritesheet config
 const SPRITE_CONFIGS: Record<string, SpriteConfig> = {
   '外卖骑手':   { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 },
   '程序员':     { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
@@ -55,70 +161,61 @@ const SPRITE_CONFIGS: Record<string, SpriteConfig> = {
   '跑步者':     { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 },
 }
 
-// Fallback sprite configs by index (for bots without occupation)
 const FALLBACK_CONFIGS: SpriteConfig[] = [
-  { sheet: 2, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 创业者
-  { sheet: 1, row: 4, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 白领
-  { sheet: 2, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 深漂青年
-  { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 程序员
-  { sheet: 2, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 保安
-  { sheet: 1, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 华强北商人
-  { sheet: 2, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 广场舞大妈
-  { sheet: 1, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 城中村大叔
-  { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 }, // 跑步者
-  { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 }, // 外卖骑手
+  { sheet: 2, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 4, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 1, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 },
+  { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 },
 ]
 
-// ── Walkable zones per scene (normalized 0-1 relative to scene image) ──
-// Based on visual analysis of design images
-// Each zone: [x, y, w, h] - characters walk within these rectangles
+// ── Walkable zones per scene ──────────────────────────────────────────────
 const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
   '宝安城中村': [
-    // Dirt alleys between buildings (avoid rooftops and building footprints)
-    [0.15, 0.22, 0.70, 0.26],  // upper alley (between top buildings)
-    [0.12, 0.50, 0.30, 0.32],  // left-center alley
-    [0.55, 0.50, 0.32, 0.32],  // right-center alley
-    [0.68, 0.22, 0.20, 0.28],  // right shop fronts
+    [0.15, 0.22, 0.70, 0.26],
+    [0.12, 0.50, 0.30, 0.32],
+    [0.55, 0.50, 0.32, 0.32],
+    [0.68, 0.22, 0.20, 0.28],
   ],
   '南山科技园': [
-    // Central paved plaza (avoid buildings top 35% and left 22%)
-    [0.22, 0.30, 0.56, 0.16],  // upper plaza near SILICON VALLEY
-    [0.10, 0.46, 0.80, 0.26],  // main central plaza
-    [0.15, 0.72, 0.70, 0.16],  // lower entrance area with coffee stalls
+    [0.22, 0.30, 0.56, 0.16],
+    [0.10, 0.46, 0.80, 0.26],
+    [0.15, 0.72, 0.70, 0.16],
   ],
   '福田CBD': [
-    [0.18, 0.38, 0.64, 0.32],  // main plaza
-    [0.05, 0.70, 0.90, 0.16],  // street level
+    [0.18, 0.38, 0.64, 0.32],
+    [0.05, 0.70, 0.90, 0.16],
   ],
   '华强北': [
-    // Dense pedestrian street - almost entire scene is walkable
-    [0.03, 0.18, 0.44, 0.65],  // left half crowd area
-    [0.52, 0.18, 0.44, 0.65],  // right half crowd area
-    [0.08, 0.80, 0.84, 0.14],  // bottom storefronts
+    [0.03, 0.18, 0.44, 0.65],
+    [0.52, 0.18, 0.44, 0.65],
+    [0.08, 0.80, 0.84, 0.14],
   ],
   '东门老街': [
-    // Stone-paved plaza (avoid shop buildings on edges and two trees)
-    [0.12, 0.20, 0.76, 0.22],  // upper plaza (in front of shops)
-    [0.12, 0.38, 0.20, 0.36],  // left of trees
-    [0.42, 0.38, 0.46, 0.36],  // right of trees
-    [0.12, 0.72, 0.76, 0.18],  // lower plaza
+    [0.12, 0.20, 0.76, 0.22],
+    [0.12, 0.38, 0.20, 0.36],
+    [0.42, 0.38, 0.46, 0.36],
+    [0.12, 0.72, 0.76, 0.18],
   ],
   '南山公寓': [
-    // Courtyards and parking areas between apartment blocks
-    [0.22, 0.40, 0.56, 0.20],  // central road between buildings
-    [0.60, 0.52, 0.28, 0.26],  // right courtyard
-    [0.08, 0.70, 0.84, 0.14],  // lower road
+    [0.22, 0.40, 0.56, 0.20],
+    [0.60, 0.52, 0.28, 0.26],
+    [0.08, 0.70, 0.84, 0.14],
   ],
   '深圳湾公园': [
-    // Grass areas and promenade ONLY (avoid water below y=0.52)
-    [0.02, 0.02, 0.40, 0.24],  // left grass (tai chi area)
-    [0.44, 0.28, 0.54, 0.20],  // right grass area
-    [0.02, 0.28, 0.88, 0.10],  // bike road
-    [0.02, 0.40, 0.60, 0.12],  // wooden promenade (not water)
+    [0.02, 0.02, 0.40, 0.24],
+    [0.44, 0.28, 0.54, 0.20],
+    [0.02, 0.28, 0.88, 0.10],
+    [0.02, 0.40, 0.60, 0.12],
   ],
 }
 
-// ── Scene metadata ────────────────────────────────────────────────────
+// ── Scene metadata ────────────────────────────────────────────────────────
 const SCENE_META: Record<string, { ambientColor: string; name: string }> = {
   '宝安城中村':  { ambientColor: '#C4956A', name: '宝安城中村' },
   '南山科技园':  { ambientColor: '#4D96FF', name: '南山科技园' },
@@ -131,10 +228,14 @@ const SCENE_META: Record<string, { ambientColor: string; name: string }> = {
 
 const SCENE_NAMES = Object.keys(SCENE_META)
 
-// ── Character constants ───────────────────────────────────────────────
-const CHAR_WALK_SPEED = 0.8   // pixels per frame (normalized)
-const WALK_FRAME_DURATION = 0.12  // seconds per animation frame
+// ── Character constants ───────────────────────────────────────────────────
+const CHAR_WALK_SPEED = 0.8
+const WALK_FRAME_DURATION = 0.12
 const WANDER_INTERVAL = 3.5
+
+// ── Large map constants ───────────────────────────────────────────────────
+// Map world size is MAP_SCALE times the viewport
+const MAP_SCALE = 2.0
 
 type Direction = 'left' | 'right' | 'down' | 'up'
 type CharState = 'idle' | 'walk' | 'sleep'
@@ -170,14 +271,14 @@ interface Props {
   currentLocation?: string
 }
 
-// ── Image cache ───────────────────────────────────────────────────────
+// ── Image cache ───────────────────────────────────────────────────────────
 const imageCache: Record<string, HTMLImageElement | null> = {}
 const imageLoaded: Record<string, boolean> = {}
 
 function preloadImage(url: string): HTMLImageElement {
   if (!imageCache[url]) {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    // No crossOrigin: CDN doesn't support CORS headers, but we only need drawImage (no pixel read)
     img.onload = () => { imageLoaded[url] = true }
     img.onerror = () => { imageLoaded[url] = false }
     img.src = url
@@ -187,7 +288,7 @@ function preloadImage(url: string): HTMLImageElement {
   return imageCache[url]!
 }
 
-// ── Random point in walk zones ────────────────────────────────────────
+// ── Random point in walk zones ────────────────────────────────────────────
 function getRandomWalkPoint(location: string): { x: number; y: number } {
   const zones = SCENE_WALK_ZONES[location] || [[0.1, 0.3, 0.8, 0.5]]
   const zone = zones[Math.floor(Math.random() * zones.length)]
@@ -207,89 +308,92 @@ function getInitialWalkPoint(location: string, index: number, total: number): { 
   }
 }
 
-// ── Get sprite config for a bot ───────────────────────────────────────
+// ── Get sprite config for a bot ───────────────────────────────────────────
 function getSpriteConfig(occupation: string | undefined, paletteIndex: number): SpriteConfig {
-  if (occupation && SPRITE_CONFIGS[occupation]) {
-    return SPRITE_CONFIGS[occupation]
-  }
+  if (occupation && SPRITE_CONFIGS[occupation]) return SPRITE_CONFIGS[occupation]
   return FALLBACK_CONFIGS[paletteIndex % FALLBACK_CONFIGS.length]
 }
 
-// ── Draw character from spritesheet ──────────────────────────────────
-function drawCharFromSheet(
-  ctx: CanvasRenderingContext2D,
-  config: SpriteConfig,
-  frame: number,
-  dir: Direction,
-  cx: number,  // center x in canvas pixels
-  cy: number,  // anchor y (feet position) in canvas pixels
-  isFlipped: boolean,
-  alpha: number = 1,
-) {
-          const sheetUrl2 = config.sheet === 1
-            ? 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png'
-            : 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png'
-          const sheet = imageCache[sheetUrl2]
-          if (!sheet || !imageLoaded[sheetUrl2]) return
-
-  // Clamp frame to valid range
-  const walkFrame = Math.min(frame, config.frameCount - 1)
-  const col = frame === 0 ? 0 : (walkFrame % config.frameCount) + 1  // col 0 = idle, 1-5 = walk
-  const actualCol = Math.min(col, SHEET_COLS - 1)
-
-  const sx = actualCol * SHEET_CELL_W
-  const sy = config.row * SHEET_CELL_H
-
-  const renderW = Math.round(SHEET_CELL_W * config.scale)
-  const renderH = Math.round(SHEET_CELL_H * config.scale)
-
-  // Anchor: feet at cy, horizontally centered at cx
-  const dx = cx - renderW / 2
-  const dy = cy - renderH * config.offsetY
-
-  ctx.save()
-  ctx.globalAlpha = alpha
-  ctx.imageSmoothingEnabled = false
-
-  if (isFlipped) {
-    // Flip horizontally: translate to center, scale -1, then draw at negative offset
-    ctx.translate(cx, 0)
-    ctx.scale(-1, 1)
-    ctx.drawImage(
-      sheet,
-      sx, sy, SHEET_CELL_W, SHEET_CELL_H,
-      -renderW / 2,
-      dy,
-      renderW, renderH
-    )
-  } else {
-    ctx.drawImage(
-      sheet,
-      sx, sy, SHEET_CELL_W, SHEET_CELL_H,
-      dx,
-      dy,
-      renderW, renderH
-    )
-  }
-
-  ctx.restore()
+// ── Initialize vehicles for a scene ──────────────────────────────────────
+function initVehicles(location: string, botCount: number): VehicleState[] {
+  const lanes = SCENE_VEHICLE_LANES[location] || []
+  const vehicles: VehicleState[] = []
+  
+  // Base count per lane + extra based on bot count
+  const extraPerLane = Math.floor(botCount / 5)
+  
+  lanes.forEach((lane, laneIdx) => {
+    // 3-6 vehicles per lane base, more with more bots
+    const count = 3 + Math.min(extraPerLane, 4)
+    for (let i = 0; i < count; i++) {
+      const config = VEHICLE_CONFIGS[lane.type]
+      // Spread vehicles evenly across the lane range
+      const spread = lane.xMax - lane.xMin
+      const x = lane.xMin + (i / count) * spread + Math.random() * (spread / count) * 0.5
+      vehicles.push({
+        id: `v_${location}_${laneIdx}_${i}`,
+        type: lane.type,
+        lane,
+        x: Math.max(lane.xMin, Math.min(lane.xMax, x)),
+        y: lane.y,
+        dir: lane.dir,
+        frame: Math.floor(Math.random() * V_COLS),
+        frameTimer: Math.random() * (1 / config.frameRate),
+      })
+    }
+  })
+  
+  return vehicles
 }
 
-// Placeholder for canvas width (will be replaced in render)
-let canvas_w_placeholder = 800
+// ── Draw vehicle from spritesheet ─────────────────────────────────────────
+function drawVehicle(
+  ctx: CanvasRenderingContext2D,
+  v: VehicleState,
+  imgDrawX: number, imgDrawY: number, imgDrawW: number, imgDrawH: number,
+) {
+  const sheet = imageCache[VEHICLE_SHEET_URL]
+  if (!sheet || !imageLoaded[VEHICLE_SHEET_URL]) return
+  
+  const config = VEHICLE_CONFIGS[v.type]
+  const frameCol = v.frame % V_COLS
+  // Cols 0-3: right, Cols 4-7: left
+  const sheetCol = v.dir === 1 ? frameCol : frameCol + V_COLS
+  
+  const sx = sheetCol * V_CELL
+  const sy = config.row * V_CELL
+  
+  const renderW = Math.round(V_CELL * config.scale)
+  const renderH = Math.round(V_CELL * config.scale)
+  
+  const cx = imgDrawX + v.x * imgDrawW
+  const cy = imgDrawY + v.y * imgDrawH
+  
+  ctx.save()
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(
+    sheet,
+    sx, sy, V_CELL, V_CELL,
+    cx - renderW / 2,
+    cy - renderH * 0.75,
+    renderW, renderH
+  )
+  ctx.restore()
+}
 
 export default function PixelCityMap({
   world, selectedBotId, onBotClick, onLocationClick, currentLocation
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const botStatesRef = useRef<Record<string, BotRenderState>>({})
+  const vehiclesRef = useRef<VehicleState[]>([])
   const bubblesRef = useRef<EmotionBubble[]>([])
   const animFrameRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
   const pulseRef = useRef(0)
   const [hoveredBotId, setHoveredBotId] = useState<string | null>(null)
 
-  // Drag-to-pan
+  // Drag-to-pan (large map)
   const panOffsetRef = useRef({ x: 0, y: 0 })
   const isDraggingRef = useRef(false)
   const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
@@ -303,12 +407,27 @@ export default function PixelCityMap({
     Object.values(SCENE_IMAGES).forEach(url => preloadImage(url))
     preloadImage('https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png')
     preloadImage('https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png')
+    preloadImage(VEHICLE_SHEET_URL)
   }, [])
+
+  // Initialize vehicles when location changes
+  useEffect(() => {
+    const botCount = world ? Object.keys(world.bots).filter(id => world.bots[id].status === 'alive').length : 10
+    vehiclesRef.current = initVehicles(activeLocation, botCount)
+    panOffsetRef.current = { x: 0, y: 0 }
+  }, [activeLocation])
 
   // Update bot states when world changes
   useEffect(() => {
     if (!world) return
     const allBotIds = Object.keys(world.bots).filter(id => world.bots[id].status === 'alive')
+
+    // Re-init vehicles if bot count changed significantly
+    const currentVehicleCount = vehiclesRef.current.length
+    const expectedMin = initVehicles(activeLocation, allBotIds.length).length
+    if (Math.abs(currentVehicleCount - expectedMin) > 3) {
+      vehiclesRef.current = initVehicles(activeLocation, allBotIds.length)
+    }
 
     allBotIds.forEach((botId, i) => {
       const bot = world.bots[botId]
@@ -348,7 +467,6 @@ export default function PixelCityMap({
         }
       }
 
-      // Spawn emotion bubble
       if (Math.random() < 0.006) {
         const emotion = getDominantEmotion(bot.emotions)
         const bs = botStatesRef.current[botId]
@@ -381,38 +499,71 @@ export default function PixelCityMap({
     const dpr = window.devicePixelRatio || 1
     const cssW = canvas.width / dpr
     const cssH = canvas.height / dpr
-    canvas_w_placeholder = cssW
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.save()
     ctx.scale(dpr, dpr)
 
-    // ── Background ────────────────────────────────────────────────
+    // ── Background ────────────────────────────────────────────────────
     ctx.fillStyle = '#0d1117'
     ctx.fillRect(0, 0, cssW, cssH)
 
-    // ── Draw scene background image ───────────────────────────────
+    // ── Large map: background image scaled to MAP_SCALE, pan offset ───
     const bgUrl = SCENE_IMAGES[activeLocation]
     const bgImg = bgUrl ? preloadImage(bgUrl) : null
-    let imgDrawX = 0, imgDrawY = 0, imgDrawW = cssW, imgDrawH = cssH
+
+    // World size (larger than viewport)
+    const worldW = cssW * MAP_SCALE
+    const worldH = cssH * MAP_SCALE
+
+    // Pan limits: allow panning up to (worldW - cssW) / 2 in each direction
+    const maxPanX = (worldW - cssW) / 2
+    const maxPanY = (worldH - cssH) / 2
+
+    // Clamp pan
+    const panX = Math.max(-maxPanX, Math.min(maxPanX, panOffsetRef.current.x))
+    const panY = Math.max(-maxPanY, Math.min(maxPanY, panOffsetRef.current.y))
+    panOffsetRef.current.x = panX
+    panOffsetRef.current.y = panY
+
+    // Image draw position: centered, then offset by pan
+    // The image fills the world area, centered in viewport + pan
+    let imgDrawX = (cssW - worldW) / 2 + panX
+    let imgDrawY = (cssH - worldH) / 2 + panY
+    let imgDrawW = worldW
+    let imgDrawH = worldH
 
     if (bgImg && imageLoaded[bgUrl!]) {
+      // Maintain aspect ratio within world bounds
+      const imgAspect = bgImg.width / bgImg.height
+      const worldAspect = worldW / worldH
+      if (worldAspect > imgAspect) {
+        imgDrawW = worldW
+        imgDrawH = worldW / imgAspect
+        imgDrawX = (cssW - worldW) / 2 + panX
+        imgDrawY = (cssH - imgDrawH) / 2 + panY
+      } else {
+        imgDrawH = worldH
+        imgDrawW = worldH * imgAspect
+        imgDrawX = (cssW - imgDrawW) / 2 + panX
+        imgDrawY = (cssH - worldH) / 2 + panY
+      }
       ctx.imageSmoothingEnabled = true
       ctx.imageSmoothingQuality = 'high'
-      const imgAspect = bgImg.width / bgImg.height
-      const canvasAspect = cssW / cssH
-      if (canvasAspect > imgAspect) {
-        imgDrawW = cssW + panOffsetRef.current.x * 2
-        imgDrawH = imgDrawW / imgAspect
-        imgDrawX = panOffsetRef.current.x
-        imgDrawY = (cssH - imgDrawH) / 2 + panOffsetRef.current.y
-      } else {
-        imgDrawH = cssH + Math.abs(panOffsetRef.current.y) * 2
-        imgDrawW = imgDrawH * imgAspect
-        imgDrawX = (cssW - imgDrawW) / 2 + panOffsetRef.current.x
-        imgDrawY = panOffsetRef.current.y
-      }
       ctx.drawImage(bgImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH)
+
+      // ── Procedural ground extension: fill areas outside image ────────
+      // Tile a simple pixel pattern to fill gaps
+      const tileColor = meta.ambientColor + '18'
+      ctx.fillStyle = tileColor
+      // Left gap
+      if (imgDrawX > 0) ctx.fillRect(0, 0, imgDrawX, cssH)
+      // Right gap
+      if (imgDrawX + imgDrawW < cssW) ctx.fillRect(imgDrawX + imgDrawW, 0, cssW - imgDrawX - imgDrawW, cssH)
+      // Top gap
+      if (imgDrawY > 0) ctx.fillRect(0, 0, cssW, imgDrawY)
+      // Bottom gap
+      if (imgDrawY + imgDrawH < cssH) ctx.fillRect(0, imgDrawY + imgDrawH, cssW, cssH - imgDrawY - imgDrawH)
     } else {
       ctx.fillStyle = meta.ambientColor + '22'
       ctx.fillRect(0, 0, cssW, cssH)
@@ -425,14 +576,65 @@ export default function PixelCityMap({
       ctx.fillText('加载场景图中...', cssW / 2, cssH / 2 + 40)
     }
 
-    // ── Bot characters ────────────────────────────────────────────
+    // ── Z-sort drawable list ──────────────────────────────────────────
     interface ZDrawable { zY: number; draw: (c: CanvasRenderingContext2D) => void }
     const drawables: ZDrawable[] = []
 
+    // ── Update & draw vehicles ────────────────────────────────────────
+    vehiclesRef.current.forEach(v => {
+      const config = VEHICLE_CONFIGS[v.type]
+      
+      // Animate frames
+      v.frameTimer += dt
+      const frameDuration = 1 / config.frameRate
+      if (v.frameTimer >= frameDuration) {
+        v.frameTimer -= frameDuration
+        v.frame = (v.frame + 1) % V_COLS
+      }
+      
+      // Move along lane
+      v.x += v.dir * config.speed * dt
+      
+      // Wrap around when reaching lane end
+      if (v.dir === 1 && v.x > v.lane.xMax + 0.05) {
+        v.x = v.lane.xMin - 0.05
+      } else if (v.dir === -1 && v.x < v.lane.xMin - 0.05) {
+        v.x = v.lane.xMax + 0.05
+      }
+      
+      // Only draw if within visible area
+      const vCx = imgDrawX + v.x * imgDrawW
+      const vCy = imgDrawY + v.y * imgDrawH
+      if (vCx < -50 || vCx > cssW + 50 || vCy < -50 || vCy > cssH + 50) return
+      
+      const vConfig = VEHICLE_CONFIGS[v.type]
+      const renderH = V_CELL * vConfig.scale
+      
+      // Shadow
+      drawables.push({
+        zY: vCy - 0.5,
+        draw: (c) => {
+          c.save()
+          c.beginPath()
+          c.ellipse(vCx, vCy + 2, V_CELL * vConfig.scale * 0.4, V_CELL * vConfig.scale * 0.12, 0, 0, Math.PI * 2)
+          c.fillStyle = 'rgba(0,0,0,0.25)'
+          c.fill()
+          c.restore()
+        }
+      })
+      
+      // Vehicle sprite
+      const vSnap = { ...v }
+      drawables.push({
+        zY: vCy,
+        draw: (c) => drawVehicle(c, vSnap, imgDrawX, imgDrawY, imgDrawW, imgDrawH)
+      })
+    })
+
+    // ── Bot characters ────────────────────────────────────────────────
     Object.entries(botStatesRef.current).forEach(([botId, bs]) => {
       bs.frameTimer += dt
 
-      // Auto-wander
       if (bs.state === 'idle') {
         bs.wanderTimer = (bs.wanderTimer ?? 0) + dt
         if (bs.wanderTimer > WANDER_INTERVAL + Math.random() * 2) {
@@ -455,7 +657,7 @@ export default function PixelCityMap({
           bs.x = bs.targetX; bs.y = bs.targetY
           bs.state = 'idle'; bs.frame = 0; bs.wanderTimer = 0
         } else {
-          const speed = CHAR_WALK_SPEED / cssW
+          const speed = CHAR_WALK_SPEED / (cssW * MAP_SCALE)
           bs.x += (dx / dist) * speed
           bs.y += (dy / dist) * speed
           if (Math.abs(dx) > Math.abs(dy)) {
@@ -477,7 +679,6 @@ export default function PixelCityMap({
       bs.trail.forEach(pt => { pt.alpha -= dt * 0.8 })
       bs.trail = bs.trail.filter(pt => pt.alpha > 0.05)
 
-      // Draw trail
       if (bs.trail.length > 1) {
         const trailColor = BOT_COLORS[botId] || '#4d96ff'
         drawables.push({
@@ -503,22 +704,20 @@ export default function PixelCityMap({
         })
       }
 
-      // Get sprite config
       const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
       const renderW = Math.round(SHEET_CELL_W * config.scale)
       const renderH = Math.round(SHEET_CELL_H * config.scale)
-
-      // Convert normalized position to canvas pixels
-      // cx = horizontal center, cy = feet anchor point
       const cx = imgDrawX + bs.x * imgDrawW
       const cy = imgDrawY + bs.y * imgDrawH
       const zY = cy
+
+      // Skip if off-screen
+      if (cx < -renderW || cx > cssW + renderW || cy < -renderH || cy > cssH + renderH) return
 
       const isSelected = selectedBotId === botId
       const isHovered = hoveredBotId === botId
       const isFlipped = bs.dir === 'left'
 
-      // Shadow
       drawables.push({
         zY: zY - 0.3,
         draw: (c) => {
@@ -531,7 +730,6 @@ export default function PixelCityMap({
         }
       })
 
-      // Selection ring
       if (isSelected) {
         const color = BOT_COLORS[botId] || '#4d96ff'
         drawables.push({
@@ -549,7 +747,6 @@ export default function PixelCityMap({
         })
       }
 
-      // Hover highlight
       if (isHovered && !isSelected) {
         drawables.push({
           zY: zY - 0.15,
@@ -565,7 +762,6 @@ export default function PixelCityMap({
         })
       }
 
-      // Character sprite from spritesheet
       const walkFrame = bs.state === 'idle' ? 0 : (bs.frame % 5) + 1
       drawables.push({
         zY,
@@ -575,7 +771,6 @@ export default function PixelCityMap({
             : 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png'
           const sheet = imageCache[sheetUrl]
           if (!sheet || !imageLoaded[sheetUrl]) {
-            // Fallback: colored circle
             c.save()
             c.beginPath()
             c.arc(cx, cy - renderH * 0.5, renderW * 0.3, 0, Math.PI * 2)
@@ -598,32 +793,25 @@ export default function PixelCityMap({
           if (isFlipped) {
             c.translate(cx, 0)
             c.scale(-1, 1)
-            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
-              -renderW / 2, dy, renderW, renderH)
+            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, -renderW / 2, dy, renderW, renderH)
           } else {
-            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
-              dx, dy, renderW, renderH)
+            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, dx, dy, renderW, renderH)
           }
 
-          // Selected: bright outline effect
           if (isSelected) {
             c.globalAlpha = 0.4
             c.globalCompositeOperation = 'screen'
             if (isFlipped) {
-              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
-                -renderW / 2, dy, renderW, renderH)
+              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, -renderW / 2, dy, renderW, renderH)
             } else {
-              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
-                dx, dy, renderW, renderH)
+              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H, dx, dy, renderW, renderH)
             }
             c.globalCompositeOperation = 'source-over'
           }
-
           c.restore()
         }
       })
 
-      // Name label
       const botColor = BOT_COLORS[botId] || '#4d96ff'
       const botName = world?.bots[botId]?.name?.slice(0, 4) ?? botId
       const labelY = cy - renderH * config.offsetY - 6
@@ -634,7 +822,6 @@ export default function PixelCityMap({
           c.font = `bold 10px 'Noto Sans SC', monospace`
           c.textAlign = 'center'
           const lw = c.measureText(botName).width
-          // Label background
           c.fillStyle = 'rgba(0,0,0,0.75)'
           c.beginPath()
           const lx = cx - lw / 2 - 4
@@ -653,7 +840,6 @@ export default function PixelCityMap({
           c.arcTo(lx, ly, lx + r, ly, r)
           c.closePath()
           c.fill()
-          // Label text
           c.fillStyle = botColor
           c.globalAlpha = 0.95
           c.fillText(botName, cx, labelY)
@@ -662,7 +848,7 @@ export default function PixelCityMap({
       })
     })
 
-    // ── Emotion bubbles ───────────────────────────────────────────
+    // ── Emotion bubbles ───────────────────────────────────────────────
     bubblesRef.current = bubblesRef.current.filter(b => b.timer > 0)
     bubblesRef.current.forEach(bubble => {
       bubble.timer -= dt
@@ -681,19 +867,16 @@ export default function PixelCityMap({
         draw: (c) => {
           c.save()
           c.globalAlpha = bubble.alpha
-          // Bubble background
           c.fillStyle = 'rgba(30,30,40,0.85)'
           c.beginPath()
           c.roundRect(bx - 14, by - 14, 28, 24, 6)
           c.fill()
-          // Bubble tail
           c.beginPath()
           c.moveTo(bx - 4, by + 10)
           c.lineTo(bx + 4, by + 10)
           c.lineTo(bx, by + 16)
           c.closePath()
           c.fill()
-          // Emoji
           c.font = `14px sans-serif`
           c.textAlign = 'center'
           c.fillText(bubble.emoji, bx, by + 4)
@@ -702,11 +885,29 @@ export default function PixelCityMap({
       })
     })
 
-    // ── Z-sort and draw ───────────────────────────────────────────
+    // ── Z-sort and draw ───────────────────────────────────────────────
     drawables.sort((a, b) => a.zY - b.zY)
     drawables.forEach(d => d.draw(ctx))
 
-    // ── Subtle vignette ───────────────────────────────────────────
+    // ── Pan indicator (minimap hint) ──────────────────────────────────
+    if (Math.abs(panX) > 10 || Math.abs(panY) > 10) {
+      const indicatorAlpha = 0.5
+      ctx.save()
+      ctx.globalAlpha = indicatorAlpha
+      // Small compass arrows at edge
+      const arrowSize = 8
+      const margin = 20
+      ctx.fillStyle = meta.ambientColor
+      ctx.font = `${arrowSize * 2}px sans-serif`
+      ctx.textAlign = 'center'
+      if (panX < -10) ctx.fillText('◀', margin, cssH / 2)
+      if (panX > 10) ctx.fillText('▶', cssW - margin, cssH / 2)
+      if (panY < -10) ctx.fillText('▲', cssW / 2, margin + arrowSize)
+      if (panY > 10) ctx.fillText('▼', cssW / 2, cssH - margin)
+      ctx.restore()
+    }
+
+    // ── Vignette ─────────────────────────────────────────────────────
     const vignette = ctx.createRadialGradient(cssW/2, cssH/2, cssH*0.3, cssW/2, cssH/2, cssH*0.8)
     vignette.addColorStop(0, 'transparent')
     vignette.addColorStop(1, 'rgba(0,0,0,0.2)')
@@ -739,11 +940,6 @@ export default function PixelCityMap({
     return () => ro.disconnect()
   }, [])
 
-  // Reset pan when location changes
-  useEffect(() => {
-    panOffsetRef.current = { x: 0, y: 0 }
-  }, [activeLocation])
-
   // Hit testing
   const getBotAtPoint = useCallback((mx: number, my: number): string | null => {
     const canvas = canvasRef.current
@@ -752,22 +948,31 @@ export default function PixelCityMap({
     const cssW = canvas.width / dpr
     const cssH = canvas.height / dpr
 
+    const worldW = cssW * MAP_SCALE
+    const worldH = cssH * MAP_SCALE
+    const panX = panOffsetRef.current.x
+    const panY = panOffsetRef.current.y
+
     const bgUrl = SCENE_IMAGES[activeLocation]
     const bgImg = bgUrl ? imageCache[bgUrl] : null
-    let imgDrawX = 0, imgDrawY = 0, imgDrawW = cssW, imgDrawH = cssH
+    let imgDrawX = (cssW - worldW) / 2 + panX
+    let imgDrawY = (cssH - worldH) / 2 + panY
+    let imgDrawW = worldW
+    let imgDrawH = worldH
+
     if (bgImg && imageLoaded[bgUrl!]) {
       const imgAspect = bgImg.width / bgImg.height
-      const canvasAspect = cssW / cssH
-      if (canvasAspect > imgAspect) {
-        imgDrawW = cssW + panOffsetRef.current.x * 2
-        imgDrawH = imgDrawW / imgAspect
-        imgDrawX = panOffsetRef.current.x
-        imgDrawY = (cssH - imgDrawH) / 2 + panOffsetRef.current.y
+      const worldAspect = worldW / worldH
+      if (worldAspect > imgAspect) {
+        imgDrawW = worldW
+        imgDrawH = worldW / imgAspect
+        imgDrawX = (cssW - worldW) / 2 + panX
+        imgDrawY = (cssH - imgDrawH) / 2 + panY
       } else {
-        imgDrawH = cssH + Math.abs(panOffsetRef.current.y) * 2
-        imgDrawW = imgDrawH * imgAspect
-        imgDrawX = (cssW - imgDrawW) / 2 + panOffsetRef.current.x
-        imgDrawY = panOffsetRef.current.y
+        imgDrawH = worldH
+        imgDrawW = worldH * imgAspect
+        imgDrawX = (cssW - imgDrawW) / 2 + panX
+        imgDrawY = (cssH - worldH) / 2 + panY
       }
     }
 
@@ -821,16 +1026,37 @@ export default function PixelCityMap({
       const dx = e.clientX - dragStartRef.current.x
       const dy = e.clientY - dragStartRef.current.y
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDragRef.current = true
-      const maxPan = 200
       panOffsetRef.current = {
-        x: Math.max(-maxPan, Math.min(maxPan, dragStartRef.current.panX + dx)),
-        y: Math.max(-maxPan, Math.min(maxPan, dragStartRef.current.panY + dy)),
+        x: dragStartRef.current.panX + dx,
+        y: dragStartRef.current.panY + dy,
       }
       return
     }
     const { mx, my } = getCanvasPos(e.clientX, e.clientY)
     setHoveredBotId(getBotAtPoint(mx, my))
   }, [getBotAtPoint, getCanvasPos])
+
+  // Touch support for mobile pan
+  const touchStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX, y: e.touches[0].clientY,
+        panX: panOffsetRef.current.x, panY: panOffsetRef.current.y,
+      }
+    }
+  }, [])
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 1 && touchStartRef.current) {
+      e.preventDefault()
+      const dx = e.touches[0].clientX - touchStartRef.current.x
+      const dy = e.touches[0].clientY - touchStartRef.current.y
+      panOffsetRef.current = {
+        x: touchStartRef.current.panX + dx,
+        y: touchStartRef.current.panY + dy,
+      }
+    }
+  }, [])
 
   return (
     <div className="relative w-full h-full">
@@ -841,12 +1067,16 @@ export default function PixelCityMap({
           cursor: isDraggingRef.current ? 'grabbing' : hoveredBotId ? 'pointer' : 'grab',
           imageRendering: 'pixelated',
           userSelect: 'none',
+          touchAction: 'none',
         }}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onClick={() => {}}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { setHoveredBotId(null); isDraggingRef.current = false }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => { touchStartRef.current = null }}
       />
       {/* Location selector tabs */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 flex-wrap justify-center max-w-full px-2">
@@ -868,6 +1098,10 @@ export default function PixelCityMap({
             {loc}
           </button>
         ))}
+      </div>
+      {/* Map scale indicator */}
+      <div className="absolute top-3 right-3 text-xs font-mono text-white/30 bg-black/30 px-2 py-0.5 rounded pointer-events-none">
+        拖拽探索 {MAP_SCALE}x 地图
       </div>
     </div>
   )

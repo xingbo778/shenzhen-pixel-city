@@ -327,7 +327,7 @@ export default function CityOverviewMap({ world, onLocationSelect }: Props) {
   // Preload background image
   useEffect(() => {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    // No crossOrigin: CDN doesn't support CORS, but drawImage works fine without it
     img.onload = () => { bgLoadedRef.current = true; bgImageRef.current = img }
     img.src = OVERVIEW_MAP_URL
   }, [])
