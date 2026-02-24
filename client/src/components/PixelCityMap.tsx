@@ -1,11 +1,11 @@
 /**
- * PixelCityMap - 深圳像素城市地图
- * 深度复用 pixel-agents 渲染系统：
- * - getCachedSprite: SpriteData → HTMLCanvasElement (像素放大)
- * - 16x24 点阵角色，4方向行走动画，4帧循环
- * - Z轴 Y排序（pixel-agents renderer.ts 的 zY 排序）
- * - 情绪气泡 (pixel-agents BUBBLE_PERMISSION_SPRITE 风格)
- * - 场景切换：7个深圳地点，各有独立建筑和地面
+ * PixelCityMap - 深圳像素城市场景视图
+ * 使用设计图作为背景底图，角色精灵在上层行走
+ *
+ * 设计哲学：高质量像素艺术场景 + 活动角色叠加
+ * - 每个场景用对应的设计图作为背景
+ * - 角色在预定义的可步行区域内漫游
+ * - 保留 Z排序、情绪气泡、选中高亮等交互
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react'
@@ -15,19 +15,74 @@ import {
   getCachedSprite, getOutlineSprite, getCharacterSprites, getOccupationSprites, getFrameSprite,
   type SpriteData, type Direction, type CharState
 } from '@/engine/spriteSystem'
-import { SCENE_CONFIGS, TILE_COLORS, type TileType } from '@/engine/sceneTiles'
 
-const TILE_SIZE = 16   // pixels per tile (logical)
-const ZOOM = 2.5       // pixel scale factor - smaller zoom shows more of the map
-const CHAR_ZOOM = 3.5  // character sprite zoom
-const CHAR_WALK_SPEED = 0.06  // tiles per frame
-const WALK_FRAME_DURATION = 0.14  // seconds per walk frame
-const WANDER_INTERVAL = 4.0  // seconds between wander target updates
+// ── Scene background images (CDN URLs) ─────────────────────────────────
+const SCENE_IMAGES: Record<string, string> = {
+  '宝安城中村':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/TUQKuaBsexENfibx.jpg',
+  '南山科技园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/AMXWXYfAokXxzjkh.jpg',
+  '福田CBD':     'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/AMXWXYfAokXxzjkh.jpg',
+  '华强北':      'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/MXLjKRWmMkhYmuLS.jpg',
+  '东门老街':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/YknUPCWZKSgNaPvP.jpg',
+  '南山公寓':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/WOckFGRbzpNWtLfq.jpg',
+  '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/kIszORrRcoRjttLM.jpg',
+}
+
+// ── Walkable zones per scene (normalized 0-1 relative to scene image) ─
+// Each zone is [x, y, w, h] - bots can walk anywhere within these zones
+const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
+  '宝安城中村': [
+    [0.05, 0.25, 0.90, 0.55],  // main alley area
+    [0.10, 0.70, 0.80, 0.25],  // lower area
+  ],
+  '南山科技园': [
+    [0.10, 0.35, 0.80, 0.35],  // central plaza
+    [0.05, 0.65, 0.90, 0.20],  // lower street
+  ],
+  '福田CBD': [
+    [0.15, 0.30, 0.70, 0.50],  // main plaza
+    [0.05, 0.75, 0.90, 0.20],  // street
+  ],
+  '华强北': [
+    [0.05, 0.25, 0.90, 0.60],  // crowded street
+    [0.10, 0.80, 0.80, 0.15],  // lower area
+  ],
+  '东门老街': [
+    [0.10, 0.20, 0.80, 0.65],  // pedestrian street
+    [0.05, 0.80, 0.90, 0.15],  // lower shops
+  ],
+  '南山公寓': [
+    [0.05, 0.30, 0.90, 0.40],  // courtyard
+    [0.10, 0.65, 0.80, 0.25],  // lower area
+  ],
+  '深圳湾公园': [
+    [0.05, 0.10, 0.55, 0.35],  // park grass
+    [0.05, 0.40, 0.90, 0.25],  // promenade
+    [0.40, 0.10, 0.55, 0.35],  // right park
+  ],
+}
+
+// ── Scene metadata ────────────────────────────────────────────────────
+const SCENE_META: Record<string, { ambientColor: string; name: string }> = {
+  '宝安城中村':  { ambientColor: '#C4956A', name: '宝安城中村' },
+  '南山科技园':  { ambientColor: '#4D96FF', name: '南山科技园' },
+  '福田CBD':     { ambientColor: '#FFD700', name: '福田CBD' },
+  '华强北':      { ambientColor: '#FF4DC8', name: '华强北' },
+  '东门老街':    { ambientColor: '#FF6B6B', name: '东门老街' },
+  '南山公寓':    { ambientColor: '#69DB7C', name: '南山公寓' },
+  '深圳湾公园':  { ambientColor: '#74C0FC', name: '深圳湾公园' },
+}
+
+const SCENE_NAMES = Object.keys(SCENE_META)
+
+// ── Character constants ───────────────────────────────────────────────
+const CHAR_ZOOM = 3.5
+const CHAR_WALK_SPEED = 1.2   // pixels per frame
+const WALK_FRAME_DURATION = 0.14
+const WANDER_INTERVAL = 4.0
 
 interface BotRenderState {
-  x: number; y: number        // current pixel pos (logical)
+  x: number; y: number        // normalized 0-1 position within scene
   targetX: number; targetY: number
-  tileCol: number; tileRow: number
   dir: Direction
   state: CharState
   frame: number
@@ -35,8 +90,6 @@ interface BotRenderState {
   paletteIndex: number
   occupation?: string
   wanderTimer: number
-  // Migration trail
-  prevLocation?: string
   currentLocation?: string
   trail?: { x: number; y: number; alpha: number }[]
   trailTimer?: number
@@ -58,8 +111,9 @@ interface Props {
   currentLocation?: string
 }
 
-// ── Emotion Bubble Sprite (pixel-agents BUBBLE style) ────────────
-function createEmotionBubble(emoji: string): SpriteData {
+// ── Emotion Bubble Sprite ─────────────────────────────────────────────
+const _ = ''
+function createEmotionBubble(): SpriteData {
   const B = '#555566', F = '#EEEEFF'
   return [
     [B,B,B,B,B,B,B,B,B,B,B],
@@ -76,175 +130,42 @@ function createEmotionBubble(emoji: string): SpriteData {
     [_,_,_,_,_,_,_,_,_,_,_],
   ]
 }
-const _ = ''
-const BUBBLE_SPRITE = createEmotionBubble('')
+const BUBBLE_SPRITE = createEmotionBubble()
 
-// ── Tilemap rendering ─────────────────────────────────────────────
-function drawTilemap(
-  ctx: CanvasRenderingContext2D,
-  tilemap: TileType[][],
-  offsetX: number, offsetY: number,
-  zoom: number,
-  time: number
-) {
-  const s = TILE_SIZE * zoom
-  for (let r = 0; r < tilemap.length; r++) {
-    const row = tilemap[r]
-    for (let c = 0; c < row.length; c++) {
-      const tile = row[c]
-      const tc = TILE_COLORS[tile]
-      const x = offsetX + c * s
-      const y = offsetY + r * s
+// ── Image cache ───────────────────────────────────────────────────────
+const imageCache: Record<string, HTMLImageElement | null> = {}
+const imageLoaded: Record<string, boolean> = {}
 
-      // Base fill
-      ctx.fillStyle = tc.base
-      ctx.fillRect(x, y, s, s)
+function preloadImage(url: string): HTMLImageElement {
+  if (!imageCache[url]) {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => { imageLoaded[url] = true }
+    img.src = url
+    imageCache[url] = img
+    imageLoaded[url] = false
+  }
+  return imageCache[url]!
+}
 
-      // Tile-specific rendering
-      if (tile === 'road_h') {
-        // Horizontal road with center dashes
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, s, 1)
-        ctx.fillRect(x, y + s - 1, s, 1)
-        // Yellow center line (every other tile)
-        if (c % 3 !== 2) {
-          ctx.fillStyle = tc.line!
-          ctx.fillRect(x + 1, y + Math.floor(s/2) - 1, s - 2, 2)
-        }
-      } else if (tile === 'road_v') {
-        // Vertical road
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, 1, s)
-        ctx.fillRect(x + s - 1, y, 1, s)
-        if (r % 3 !== 2) {
-          ctx.fillStyle = tc.line!
-          ctx.fillRect(x + Math.floor(s/2) - 1, y + 1, 2, s - 2)
-        }
-      } else if (tile === 'road_cross') {
-        // Intersection: zebra crossing marks
-        ctx.fillStyle = tc.line!
-        for (let i = 0; i < 3; i++) {
-          ctx.fillRect(x + 1 + i * Math.floor(s/3), y + 1, Math.floor(s/4), s - 2)
-        }
-      } else if (tile === 'sidewalk' || tile === 'sidewalk_edge') {
-        // Sidewalk with subtle grid
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, s, 1)
-        ctx.fillRect(x, y, 1, s)
-        if (tile === 'sidewalk_edge') {
-          ctx.fillStyle = tc.line!
-          ctx.fillRect(x, y + s - 2, s, 2)
-        }
-      } else if (tile === 'grass' || tile === 'grass_lush') {
-        // Grass with subtle texture
-        ctx.fillStyle = tc.detail!
-        if ((r + c) % 3 === 0) ctx.fillRect(x + 2, y + 2, 2, 2)
-        if ((r + c) % 5 === 1) ctx.fillRect(x + s - 4, y + s - 4, 2, 2)
-      } else if (tile === 'water' || tile === 'water_edge') {
-        // Animated water shimmer
-        const wave = Math.sin(time * 1.5 + c * 0.5 + r * 0.3) * 0.5 + 0.5
-        ctx.fillStyle = tc.detail!
-        ctx.globalAlpha = 0.3 + wave * 0.2
-        ctx.fillRect(x, y + Math.floor(s * 0.3), s, 2)
-        ctx.fillRect(x, y + Math.floor(s * 0.7), s, 2)
-        ctx.globalAlpha = 1
-        if (tile === 'water_edge') {
-          ctx.fillStyle = tc.line!
-          ctx.fillRect(x, y, s, 2)
-        }
-      } else if (tile === 'tile_plaza') {
-        // Plaza with decorative pattern
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, s, 1)
-        ctx.fillRect(x, y, 1, s)
-        if ((r + c) % 4 === 0) {
-          ctx.fillStyle = tc.line!
-          ctx.fillRect(x + Math.floor(s/2) - 1, y + Math.floor(s/2) - 1, 2, 2)
-        }
-      } else if (tile === 'fence_green') {
-        // Green fence strip
-        ctx.fillStyle = '#1A4A10'
-        ctx.fillRect(x, y, s, 2)
-        ctx.fillRect(x, y + s - 2, s, 2)
-        ctx.fillStyle = '#2A6A20'
-        if (c % 2 === 0) ctx.fillRect(x + Math.floor(s/2) - 1, y + 2, 2, s - 4)
-      } else if (tile === 'alley') {
-        // Narrow alley
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, s, 1)
-        ctx.fillRect(x, y, 1, s)
-      } else if (tile === 'concrete') {
-        // Concrete with subtle cracks
-        ctx.fillStyle = tc.detail!
-        if ((r * 3 + c * 7) % 11 === 0) ctx.fillRect(x + 3, y + 3, s - 6, 1)
-      } else if (tile === 'park_path') {
-        // Park path with edge detail
-        ctx.fillStyle = tc.detail!
-        ctx.fillRect(x, y, s, 1)
-        ctx.fillRect(x, y + s - 1, s, 1)
-        if (tc.line) {
-          ctx.fillStyle = tc.line
-          ctx.fillRect(x + 1, y + 1, s - 2, 1)
-        }
-      } else if (tile === 'building') {
-        // Building footprint (dark, no detail)
-        ctx.fillStyle = '#111120'
-        ctx.fillRect(x, y, s, s)
-      }
-    }
+// ── Random point in walk zones ────────────────────────────────────────
+function getRandomWalkPoint(location: string): { x: number; y: number } {
+  const zones = SCENE_WALK_ZONES[location] || [[0.1, 0.3, 0.8, 0.5]]
+  const zone = zones[Math.floor(Math.random() * zones.length)]
+  return {
+    x: zone[0] + Math.random() * zone[2],
+    y: zone[1] + Math.random() * zone[3],
   }
 }
 
-function lightenHex(hex: string, amount: number): string {
-  const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount)
-  const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount)
-  const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount)
-  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
-}
-
-// ── Walkable tile check (bots can walk on roads, sidewalks, plazas, grass, paths) ───
-const WALKABLE_TILES = new Set<TileType>([
-  'road_h', 'road_v', 'road_cross',
-  'sidewalk', 'sidewalk_edge', 'grass', 'grass_lush', 'concrete',
-  'tile_plaza', 'park_path', 'fence_green',
-])
-
-function getWalkableTiles(tilemap: TileType[][]): { col: number; row: number }[] {
-  const tiles: { col: number; row: number }[] = []
-  for (let r = 0; r < tilemap.length; r++) {
-    for (let c = 0; c < tilemap[r].length; c++) {
-      if (WALKABLE_TILES.has(tilemap[r][c])) {
-        tiles.push({ col: c, row: r })
-      }
-    }
+function getInitialWalkPoint(location: string, index: number, total: number): { x: number; y: number } {
+  const zones = SCENE_WALK_ZONES[location] || [[0.1, 0.3, 0.8, 0.5]]
+  const zone = zones[index % zones.length]
+  const t = total > 1 ? index / (total - 1) : 0.5
+  return {
+    x: zone[0] + t * zone[2] * 0.8 + 0.1 * zone[2],
+    y: zone[1] + (0.3 + Math.random() * 0.4) * zone[3],
   }
-  return tiles
-}
-
-function assignBotTiles(
-  botIds: string[], tilemap: TileType[][], cols: number, rows: number
-): Record<string, { col: number; row: number }> {
-  const walkable = getWalkableTiles(tilemap)
-  const result: Record<string, { col: number; row: number }> = {}
-  if (walkable.length === 0) {
-    // fallback
-    botIds.forEach((id, i) => {
-      result[id] = { col: 2 + (i % (cols - 4)), row: Math.floor(rows * 0.7) }
-    })
-    return result
-  }
-  botIds.forEach((id, i) => {
-    // Spread evenly across walkable tiles
-    const idx = Math.floor((i / botIds.length) * walkable.length)
-    result[id] = walkable[idx % walkable.length]
-  })
-  return result
-}
-
-function getRandomWalkableTile(tilemap: TileType[][]): { col: number; row: number } | null {
-  const walkable = getWalkableTiles(tilemap)
-  if (walkable.length === 0) return null
-  return walkable[Math.floor(Math.random() * walkable.length)]
 }
 
 export default function PixelCityMap({
@@ -257,92 +178,72 @@ export default function PixelCityMap({
   const lastTimeRef = useRef<number>(0)
   const pulseRef = useRef(0)
   const [hoveredBotId, setHoveredBotId] = useState<string | null>(null)
-  // Drag-to-pan state
+
+  // Drag-to-pan
   const panOffsetRef = useRef({ x: 0, y: 0 })
   const isDraggingRef = useRef(false)
   const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const didDragRef = useRef(false)
 
-  // Active scene
-  const activeLocation = currentLocation || Object.keys(SCENE_CONFIGS)[0]
-  const scene = SCENE_CONFIGS[activeLocation] || SCENE_CONFIGS['南山科技园']
+  const activeLocation = currentLocation || SCENE_NAMES[0]
+  const meta = SCENE_META[activeLocation] || SCENE_META['南山科技园']
 
-  // Update bot target positions when world changes
+  // Preload all scene images
+  useEffect(() => {
+    Object.values(SCENE_IMAGES).forEach(url => preloadImage(url))
+  }, [])
+
+  // Update bot states when world changes
   useEffect(() => {
     if (!world) return
-    // Show ALL bots on the map (not filtered by location)
-    // Bots at current location wander freely; others are shown as visitors
     const allBotIds = Object.keys(world.bots).filter(id => world.bots[id].status === 'alive')
-    const assignments = assignBotTiles(allBotIds, scene.tilemap, scene.cols, scene.rows)
 
     allBotIds.forEach((botId, i) => {
       const bot = world.bots[botId]
       if (!bot) return
-      const assign = assignments[botId]
-
-      // Bots at current location get random walkable-tile targets
       const isHere = bot.location === activeLocation
-      let wanderCol = assign.col
-      let wanderRow = assign.row
-      if (isHere) {
-        const wt = getRandomWalkableTile(scene.tilemap)
-        if (wt) { wanderCol = wt.col; wanderRow = wt.row }
-      }
-
-      const tx = wanderCol * TILE_SIZE + TILE_SIZE / 2
-      const ty = wanderRow * TILE_SIZE + TILE_SIZE / 2
 
       if (!botStatesRef.current[botId]) {
-        // Initial position: start at assigned tile
-        const sx = assign.col * TILE_SIZE + TILE_SIZE / 2
-        const sy = assign.row * TILE_SIZE + TILE_SIZE / 2
+        const pt = getInitialWalkPoint(activeLocation, i, allBotIds.length)
+        const target = getRandomWalkPoint(activeLocation)
         botStatesRef.current[botId] = {
-          x: sx, y: sy, targetX: tx, targetY: ty,
-          tileCol: assign.col, tileRow: assign.row,
+          x: pt.x, y: pt.y,
+          targetX: target.x, targetY: target.y,
           dir: 'down',
           state: bot.is_sleeping ? 'sleep' : (isHere ? 'walk' : 'idle'),
           frame: 0, frameTimer: 0,
           paletteIndex: i % 10,
-          occupation: world?.bots[botId]?.occupation,
+          occupation: bot.occupation,
           wanderTimer: Math.random() * WANDER_INTERVAL,
           currentLocation: bot.location,
-          trail: [{ x: sx, y: sy, alpha: 1.0 }],  // always track trail
+          trail: [],
           trailTimer: 0,
         }
       } else {
         const bs = botStatesRef.current[botId]
-        // Detect location change -> spawn migration trail
         if (bs.currentLocation && bs.currentLocation !== bot.location) {
-          // Record trail from current position
-          bs.prevLocation = bs.currentLocation
           bs.trail = [{ x: bs.x, y: bs.y, alpha: 1.0 }]
           bs.trailTimer = 0
         }
         bs.currentLocation = bot.location
-        // Periodically give bots at current location new wander targets
-        if (isHere && Math.abs(bs.x - bs.targetX) < 2 && Math.abs(bs.y - bs.targetY) < 2) {
-          const wt2 = getRandomWalkableTile(scene.tilemap)
-          if (wt2) {
-            bs.targetX = wt2.col * TILE_SIZE + TILE_SIZE / 2
-            bs.targetY = wt2.row * TILE_SIZE + TILE_SIZE / 2
-          }
+        bs.occupation = bot.occupation
+        if (isHere && Math.abs(bs.x - bs.targetX) < 0.01 && Math.abs(bs.y - bs.targetY) < 0.01) {
+          const wt = getRandomWalkPoint(activeLocation)
+          bs.targetX = wt.x; bs.targetY = wt.y
           bs.state = bot.is_sleeping ? 'sleep' : 'walk'
         } else if (!isHere) {
           bs.state = bot.is_sleeping ? 'sleep' : 'idle'
         }
       }
 
-      // Spawn emotion bubble occasionally
+      // Spawn emotion bubble
       if (Math.random() < 0.008) {
         const emotion = getDominantEmotion(bot.emotions)
         const bs = botStatesRef.current[botId]
         if (bs) {
           bubblesRef.current.push({
-            botId,
-            emoji: emotion.emoji,
-            x: bs.x, y: bs.y,
-            alpha: 1,
-            timer: 2.5,
+            botId, emoji: emotion.emoji,
+            x: bs.x, y: bs.y, alpha: 1, timer: 2.5,
           })
         }
       }
@@ -352,9 +253,9 @@ export default function PixelCityMap({
     Object.keys(botStatesRef.current).forEach(id => {
       if (!allBotIds.includes(id)) delete botStatesRef.current[id]
     })
-  }, [world, activeLocation, scene.cols, scene.rows])
+  }, [world, activeLocation])
 
-  // Main render loop (pixel-agents gameLoop style)
+  // Main render loop
   const render = useCallback((timestamp: number) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -364,6 +265,7 @@ export default function PixelCityMap({
     const dt = Math.min((timestamp - lastTimeRef.current) / 1000, 0.05)
     lastTimeRef.current = timestamp
     pulseRef.current = (pulseRef.current + dt * 1.5) % (Math.PI * 2)
+    const pulse = Math.sin(pulseRef.current)
 
     const dpr = window.devicePixelRatio || 1
     const cssW = canvas.width / dpr
@@ -373,64 +275,60 @@ export default function PixelCityMap({
     ctx.save()
     ctx.scale(dpr, dpr)
 
-    // ── Background ──────────────────────────────────────────────
-    ctx.fillStyle = '#060b14'
+    // ── Background ────────────────────────────────────────────────
+    ctx.fillStyle = '#0d1117'
     ctx.fillRect(0, 0, cssW, cssH)
 
-    // ── Scene offset: center + pan offset ─────────────────────────
-    const sceneW = scene.cols * TILE_SIZE * ZOOM
-    const sceneH = scene.rows * TILE_SIZE * ZOOM
-    const baseCenterX = Math.floor((cssW - sceneW) / 2)
-    const baseCenterY = sceneH < cssH ? Math.floor((cssH - sceneH) / 2) : 0
-    const offsetX = baseCenterX + panOffsetRef.current.x
-    const offsetY = baseCenterY + panOffsetRef.current.y
+    // ── Draw scene background image ───────────────────────────────
+    const bgUrl = SCENE_IMAGES[activeLocation]
+    const bgImg = bgUrl ? preloadImage(bgUrl) : null
+    let imgDrawX = 0, imgDrawY = 0, imgDrawW = cssW, imgDrawH = cssH
 
-    // ── Tilemap (pixel-agents renderTileGrid style) ────────────
-    drawTilemap(ctx, scene.tilemap, offsetX, offsetY, ZOOM, timestamp / 1000)
+    if (bgImg && imageLoaded[bgUrl!]) {
+      ctx.imageSmoothingEnabled = false
+      // Cover: scale to fill canvas, centered
+      const imgAspect = bgImg.width / bgImg.height
+      const canvasAspect = cssW / cssH
+      if (canvasAspect > imgAspect) {
+        imgDrawW = cssW + panOffsetRef.current.x * 2
+        imgDrawH = imgDrawW / imgAspect
+        imgDrawX = panOffsetRef.current.x
+        imgDrawY = (cssH - imgDrawH) / 2 + panOffsetRef.current.y
+      } else {
+        imgDrawH = cssH + Math.abs(panOffsetRef.current.y) * 2
+        imgDrawW = imgDrawH * imgAspect
+        imgDrawX = (cssW - imgDrawW) / 2 + panOffsetRef.current.x
+        imgDrawY = panOffsetRef.current.y
+      }
+      ctx.drawImage(bgImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH)
+    } else {
+      // Fallback: dark background with location name
+      ctx.fillStyle = meta.ambientColor + '22'
+      ctx.fillRect(0, 0, cssW, cssH)
+      ctx.fillStyle = meta.ambientColor + '44'
+      ctx.font = 'bold 48px "Noto Sans SC", sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText(meta.name, cssW / 2, cssH / 2)
+      ctx.font = '14px monospace'
+      ctx.fillStyle = 'rgba(255,255,255,0.3)'
+      ctx.fillText('加载场景图中...', cssW / 2, cssH / 2 + 40)
+    }
 
-    // ── Ambient light overlay ───────────────────────────────────
-    const pulse = Math.sin(pulseRef.current)
-    const ambientGrad = ctx.createRadialGradient(
-      offsetX + sceneW / 2, offsetY + sceneH / 2, 0,
-      offsetX + sceneW / 2, offsetY + sceneH / 2, sceneW * 0.7
-    )
-    ambientGrad.addColorStop(0, scene.ambientColor + '18')
-    ambientGrad.addColorStop(1, 'transparent')
-    ctx.fillStyle = ambientGrad
-    ctx.fillRect(offsetX, offsetY, sceneW, sceneH)
-
-    // ── Scene objects (buildings, trees, etc.) ──────────────────
-    // Collect all drawables for Z-sort (pixel-agents renderScene style)
+    // ── Bot characters ────────────────────────────────────────────
     interface ZDrawable { zY: number; draw: (c: CanvasRenderingContext2D) => void }
     const drawables: ZDrawable[] = []
 
-    scene.objects.forEach(obj => {
-      const cached = getCachedSprite(obj.sprite, ZOOM)
-      const px = offsetX + obj.col * TILE_SIZE * ZOOM
-      const py = offsetY + obj.row * TILE_SIZE * ZOOM
-      const zY = obj.zY ?? (py + cached.height)
-      drawables.push({
-        zY,
-        draw: (c) => c.drawImage(cached, px, py)
-      })
-    })
-
-    // ── Bot characters ──────────────────────────────────────────
     Object.entries(botStatesRef.current).forEach(([botId, bs]) => {
-      // Update animation
       bs.frameTimer += dt
 
-      // Auto-wander: give idle bots new random walkable-tile targets
+      // Auto-wander
       if (bs.state === 'idle') {
         bs.wanderTimer = (bs.wanderTimer ?? 0) + dt
         if (bs.wanderTimer > WANDER_INTERVAL + Math.random() * 2) {
           bs.wanderTimer = 0
-          const wt = getRandomWalkableTile(scene.tilemap)
-          if (wt) {
-            bs.targetX = wt.col * TILE_SIZE + TILE_SIZE / 2
-            bs.targetY = wt.row * TILE_SIZE + TILE_SIZE / 2
-            bs.state = 'walk'
-          }
+          const wt = getRandomWalkPoint(activeLocation)
+          bs.targetX = wt.x; bs.targetY = wt.y
+          bs.state = 'walk'
         }
       }
 
@@ -439,18 +337,16 @@ export default function PixelCityMap({
           bs.frameTimer -= WALK_FRAME_DURATION
           bs.frame = (bs.frame + 1) % 4
         }
-        // Move toward target (lerp, pixel-agents characters.ts style)
-        const dx = bs.targetX - bs.x, dy = bs.targetY - bs.y
+        const dx = bs.targetX - bs.x
+        const dy = bs.targetY - bs.y
         const dist = Math.hypot(dx, dy)
-        if (dist < 1) {
+        if (dist < 0.005) {
           bs.x = bs.targetX; bs.y = bs.targetY
-          bs.state = 'idle'; bs.frame = 0
-          bs.wanderTimer = 0
+          bs.state = 'idle'; bs.frame = 0; bs.wanderTimer = 0
         } else {
-          const speed = CHAR_WALK_SPEED * TILE_SIZE
+          const speed = CHAR_WALK_SPEED / cssW  // normalize speed to canvas width
           bs.x += (dx / dist) * speed
           bs.y += (dy / dist) * speed
-          // Update direction
           if (Math.abs(dx) > Math.abs(dy)) {
             bs.dir = dx > 0 ? 'right' : 'left'
           } else {
@@ -459,35 +355,35 @@ export default function PixelCityMap({
         }
       }
 
-      // Update trail: always track walking bots, fade old points
+      // Trail
       if (!bs.trail) bs.trail = []
       bs.trailTimer = (bs.trailTimer ?? 0) + dt
-      if (bs.state === 'walk' && bs.trailTimer > 0.12) {
+      if (bs.state === 'walk' && bs.trailTimer > 0.15) {
         bs.trailTimer = 0
         bs.trail.push({ x: bs.x, y: bs.y, alpha: 1.0 })
-        if (bs.trail.length > 30) bs.trail.shift()
+        if (bs.trail.length > 20) bs.trail.shift()
       }
-      bs.trail.forEach(pt => { pt.alpha -= dt * 0.5 })
+      bs.trail.forEach(pt => { pt.alpha -= dt * 0.6 })
       bs.trail = bs.trail.filter(pt => pt.alpha > 0.05)
 
-      // Draw migration trail (colored dashed line)
-      if (bs.trail && bs.trail.length > 1) {
+      // Draw trail
+      if (bs.trail.length > 1) {
         const trailColor = BOT_COLORS[botId] || '#4d96ff'
         drawables.push({
           zY: -9999,
           draw: (c) => {
             c.save()
-            c.setLineDash([4, 4])
-            c.lineWidth = 2
+            c.setLineDash([3, 3])
+            c.lineWidth = 1.5
             for (let ti = 1; ti < bs.trail!.length; ti++) {
               const pt0 = bs.trail![ti - 1]
               const pt1 = bs.trail![ti]
-              const alpha = Math.min(pt0.alpha, pt1.alpha) * 0.7
+              const alpha = Math.min(pt0.alpha, pt1.alpha) * 0.5
               c.strokeStyle = trailColor
               c.globalAlpha = alpha
               c.beginPath()
-              c.moveTo(offsetX + pt0.x * ZOOM, offsetY + pt0.y * ZOOM)
-              c.lineTo(offsetX + pt1.x * ZOOM, offsetY + pt1.y * ZOOM)
+              c.moveTo(imgDrawX + pt0.x * imgDrawW, imgDrawY + pt0.y * imgDrawH)
+              c.lineTo(imgDrawX + pt1.x * imgDrawW, imgDrawY + pt1.y * imgDrawH)
               c.stroke()
             }
             c.setLineDash([])
@@ -496,28 +392,30 @@ export default function PixelCityMap({
         })
       }
 
+      // Character sprite
       const sprites = bs.occupation ? getOccupationSprites(bs.occupation) : getCharacterSprites(bs.paletteIndex)
       const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
       const cached = getCachedSprite(spriteData, CHAR_ZOOM)
 
-      // Pixel position on canvas
-      const px = offsetX + Math.round(bs.x * ZOOM) - cached.width / 2
-      const py = offsetY + Math.round(bs.y * ZOOM) - cached.height
-      const zY = offsetY + bs.y * ZOOM  // Y-sort anchor (pixel-agents style)
+      // Convert normalized position to canvas pixels
+      const cx = imgDrawX + bs.x * imgDrawW
+      const cy = imgDrawY + bs.y * imgDrawH
+      const px = Math.round(cx - cached.width / 2)
+      const py = Math.round(cy - cached.height)
+      const zY = cy
 
       const isSelected = selectedBotId === botId
       const isHovered = hoveredBotId === botId
 
-      // White outline for selected/hovered (pixel-agents getOutlineSprite)
+      // Outline for selected/hovered
       if (isSelected || isHovered) {
         const outlineData = getOutlineSprite(spriteData)
         const outlineCached = getCachedSprite(outlineData, CHAR_ZOOM)
-        const olAlpha = isSelected ? 0.9 : 0.5
         drawables.push({
           zY: zY - 0.1,
           draw: (c) => {
             c.save()
-            c.globalAlpha = olAlpha
+            c.globalAlpha = isSelected ? 0.9 : 0.5
             c.drawImage(outlineCached, px - CHAR_ZOOM, py - CHAR_ZOOM)
             c.restore()
           }
@@ -532,11 +430,7 @@ export default function PixelCityMap({
           draw: (c) => {
             c.save()
             c.beginPath()
-            c.ellipse(
-              offsetX + bs.x * ZOOM,
-              offsetY + bs.y * ZOOM + 2,
-              18, 6, 0, 0, Math.PI * 2
-            )
+            c.ellipse(cx, cy + 2, 18, 6, 0, 0, Math.PI * 2)
             c.strokeStyle = color
             c.lineWidth = 2
             c.globalAlpha = 0.7 + pulse * 0.3
@@ -546,76 +440,62 @@ export default function PixelCityMap({
         })
       }
 
-      // Shadow ellipse
+      // Shadow (scaled to CHAR_ZOOM)
       drawables.push({
         zY: zY - 0.3,
         draw: (c) => {
           c.save()
           c.beginPath()
-          c.ellipse(
-            offsetX + bs.x * ZOOM,
-            offsetY + bs.y * ZOOM + 2,
-            12, 5, 0, 0, Math.PI * 2
-          )
-          c.fillStyle = 'rgba(0,0,0,0.4)'
+          c.ellipse(cx, cy + 2, cached.width * 0.4, cached.width * 0.15, 0, 0, Math.PI * 2)
+          c.fillStyle = 'rgba(0,0,0,0.3)'
           c.fill()
           c.restore()
         }
       })
 
+      // Character
       drawables.push({ zY, draw: (c) => c.drawImage(cached, px, py) })
 
       // Name label
       const botColor = BOT_COLORS[botId] || '#4d96ff'
+      const botName = world?.bots[botId]?.name?.slice(0, 3) ?? botId
       drawables.push({
         zY: zY + 1,
         draw: (c) => {
           c.save()
           c.font = `bold 11px 'Noto Sans SC', monospace`
           c.textAlign = 'center'
-          const label = world?.bots[botId]?.name?.slice(0, 3) ?? botId
-          const lw = c.measureText(label).width
-          c.fillStyle = 'rgba(6,11,20,0.75)'
-          c.fillRect(
-            offsetX + bs.x * ZOOM - lw / 2 - 3,
-            offsetY + bs.y * ZOOM - cached.height - 14,
-            lw + 6, 13
-          )
+          const lw = c.measureText(botName).width
+          c.fillStyle = 'rgba(0,0,0,0.7)'
+          c.fillRect(cx - lw / 2 - 3, cy - cached.height - 14, lw + 6, 13)
           c.fillStyle = botColor
           c.globalAlpha = 0.95
-          c.fillText(
-            label,
-            offsetX + bs.x * ZOOM,
-            offsetY + bs.y * ZOOM - cached.height - 4
-          )
+          c.fillText(botName, cx, cy - cached.height - 4)
           c.restore()
         }
       })
     })
 
-    // ── Emotion bubbles (pixel-agents BUBBLE_PERMISSION_SPRITE style) ─
+    // ── Emotion bubbles ───────────────────────────────────────────
     bubblesRef.current = bubblesRef.current.filter(b => b.timer > 0)
     bubblesRef.current.forEach(bubble => {
       bubble.timer -= dt
       bubble.alpha = Math.min(1, bubble.timer / 0.5)
-      bubble.y -= dt * 8  // float upward
+      bubble.y -= dt * 0.003
 
       const bs = botStatesRef.current[bubble.botId]
       if (!bs) return
+      const bx = imgDrawX + bs.x * imgDrawW - 16
+      const by = imgDrawY + bs.y * imgDrawH - 60
 
-      const bx = offsetX + bs.x * ZOOM - 16
-      const by = offsetY + bs.y * ZOOM - getCachedSprite(
-        getFrameSprite(getCharacterSprites(bs.paletteIndex), bs.state, bs.dir, bs.frame), ZOOM
-      ).height - 20
-
-      const bubbleCached = getCachedSprite(BUBBLE_SPRITE, ZOOM)
+      const bubbleCached = getCachedSprite(BUBBLE_SPRITE, 2.5)
       drawables.push({
-        zY: offsetY + bs.y * ZOOM - 100,
+        zY: imgDrawY + bs.y * imgDrawH - 100,
         draw: (c) => {
           c.save()
           c.globalAlpha = bubble.alpha
           c.drawImage(bubbleCached, bx, by)
-          c.font = `${ZOOM * 4}px sans-serif`
+          c.font = `12px sans-serif`
           c.textAlign = 'center'
           c.fillText(bubble.emoji, bx + bubbleCached.width / 2, by + bubbleCached.height * 0.65)
           c.restore()
@@ -623,28 +503,20 @@ export default function PixelCityMap({
       })
     })
 
-    // ── Z-sort and draw all (pixel-agents renderScene style) ────
+    // ── Z-sort and draw ───────────────────────────────────────────
     drawables.sort((a, b) => a.zY - b.zY)
     drawables.forEach(d => d.draw(ctx))
 
-    // ── Scanline overlay (CRT effect) ───────────────────────────
-    ctx.fillStyle = 'rgba(0,0,0,0.025)'
-    for (let y = 0; y < cssH; y += 3) {
-      ctx.fillRect(0, y, cssW, 1)
-    }
-
-    // ── Location name watermark ─────────────────────────────────
-    ctx.save()
-    ctx.font = `bold 11px 'Orbitron', monospace`
-    ctx.fillStyle = scene.ambientColor
-    ctx.globalAlpha = 0.5
-    ctx.textAlign = 'left'
-    ctx.fillText(`[ ${scene.name} ]`, offsetX + 8, offsetY + 16)
-    ctx.restore()
+    // ── Subtle vignette ───────────────────────────────────────────
+    const vignette = ctx.createRadialGradient(cssW/2, cssH/2, cssH*0.3, cssW/2, cssH/2, cssH*0.8)
+    vignette.addColorStop(0, 'transparent')
+    vignette.addColorStop(1, 'rgba(0,0,0,0.25)')
+    ctx.fillStyle = vignette
+    ctx.fillRect(0, 0, cssW, cssH)
 
     ctx.restore()
     animFrameRef.current = requestAnimationFrame(render)
-  }, [world, selectedBotId, hoveredBotId, activeLocation, scene])
+  }, [world, selectedBotId, hoveredBotId, activeLocation, meta])
 
   useEffect(() => {
     lastTimeRef.current = performance.now()
@@ -668,23 +540,41 @@ export default function PixelCityMap({
     return () => ro.disconnect()
   }, [])
 
-  // Hit testing for clicks and hover
+  // Reset pan when location changes
+  useEffect(() => {
+    panOffsetRef.current = { x: 0, y: 0 }
+  }, [activeLocation])
+
+  // Hit testing
   const getBotAtPoint = useCallback((mx: number, my: number): string | null => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const dpr = window.devicePixelRatio || 1
     const cssW = canvas.width / dpr
     const cssH = canvas.height / dpr
-    const sceneW = scene.cols * TILE_SIZE * ZOOM
-    const sceneH = scene.rows * TILE_SIZE * ZOOM
-    const baseCenterX = (cssW - sceneW) / 2
-    const baseCenterY = sceneH < cssH ? (cssH - sceneH) / 2 : 0
-    const offsetX = baseCenterX + panOffsetRef.current.x
-    const offsetY = baseCenterY + panOffsetRef.current.y
+
+    const bgUrl = SCENE_IMAGES[activeLocation]
+    const bgImg = bgUrl ? imageCache[bgUrl] : null
+    let imgDrawX = 0, imgDrawY = 0, imgDrawW = cssW, imgDrawH = cssH
+    if (bgImg && imageLoaded[bgUrl!]) {
+      const imgAspect = bgImg.width / bgImg.height
+      const canvasAspect = cssW / cssH
+      if (canvasAspect > imgAspect) {
+        imgDrawW = cssW + panOffsetRef.current.x * 2
+        imgDrawH = imgDrawW / imgAspect
+        imgDrawX = panOffsetRef.current.x
+        imgDrawY = (cssH - imgDrawH) / 2 + panOffsetRef.current.y
+      } else {
+        imgDrawH = cssH + Math.abs(panOffsetRef.current.y) * 2
+        imgDrawW = imgDrawH * imgAspect
+        imgDrawX = (cssW - imgDrawW) / 2 + panOffsetRef.current.x
+        imgDrawY = panOffsetRef.current.y
+      }
+    }
 
     for (const [botId, bs] of Object.entries(botStatesRef.current)) {
-      const cx = offsetX + bs.x * ZOOM
-      const cy = offsetY + bs.y * ZOOM
+      const cx = imgDrawX + bs.x * imgDrawW
+      const cy = imgDrawY + bs.y * imgDrawH
       const sprites = bs.occupation ? getOccupationSprites(bs.occupation) : getCharacterSprites(bs.paletteIndex)
       const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
       const cached = getCachedSprite(spriteData, CHAR_ZOOM)
@@ -695,7 +585,7 @@ export default function PixelCityMap({
       }
     }
     return null
-  }, [scene.cols, scene.rows])
+  }, [activeLocation])
 
   const getCanvasPos = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
@@ -712,16 +602,13 @@ export default function PixelCityMap({
     isDraggingRef.current = true
     didDragRef.current = false
     dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panX: panOffsetRef.current.x,
-      panY: panOffsetRef.current.y,
+      x: e.clientX, y: e.clientY,
+      panX: panOffsetRef.current.x, panY: panOffsetRef.current.y,
     }
   }, [])
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     isDraggingRef.current = false
-    // Only fire click if we didn't drag
     if (!didDragRef.current) {
       const { mx, my } = getCanvasPos(e.clientX, e.clientY)
       const botId = getBotAtPoint(mx, my)
@@ -730,39 +617,21 @@ export default function PixelCityMap({
     didDragRef.current = false
   }, [getBotAtPoint, onBotClick, getCanvasPos])
 
-  const handleClick = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
-    // handled by mouseup
-  }, [])
-
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDraggingRef.current) {
       const dx = e.clientX - dragStartRef.current.x
       const dy = e.clientY - dragStartRef.current.y
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDragRef.current = true
-      // Clamp pan so map doesn't go completely off screen
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const dpr = window.devicePixelRatio || 1
-      const cssW = canvas.width / dpr
-      const cssH = canvas.height / dpr
-      const sceneW = scene.cols * TILE_SIZE * ZOOM
-      const sceneH = scene.rows * TILE_SIZE * ZOOM
-      const maxPanX = sceneW * 0.5
-      const maxPanY = sceneH * 0.5
+      const maxPan = 200
       panOffsetRef.current = {
-        x: Math.max(-maxPanX, Math.min(maxPanX, dragStartRef.current.panX + dx)),
-        y: Math.max(-maxPanY, Math.min(maxPanY, dragStartRef.current.panY + dy)),
+        x: Math.max(-maxPan, Math.min(maxPan, dragStartRef.current.panX + dx)),
+        y: Math.max(-maxPan, Math.min(maxPan, dragStartRef.current.panY + dy)),
       }
       return
     }
     const { mx, my } = getCanvasPos(e.clientX, e.clientY)
     setHoveredBotId(getBotAtPoint(mx, my))
-  }, [getBotAtPoint, getCanvasPos, scene.cols, scene.rows])
-
-  // Reset pan when location changes
-  useEffect(() => {
-    panOffsetRef.current = { x: 0, y: 0 }
-  }, [activeLocation])
+  }, [getBotAtPoint, getCanvasPos])
 
   return (
     <div className="relative w-full h-full">
@@ -776,22 +645,26 @@ export default function PixelCityMap({
         }}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
-        onClick={handleClick}
+        onClick={() => {}}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { setHoveredBotId(null); isDraggingRef.current = false }}
       />
       {/* Location selector tabs */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 flex-wrap justify-center max-w-full px-2">
-        {Object.keys(SCENE_CONFIGS).map(loc => (
+        {SCENE_NAMES.map(loc => (
           <button
             key={loc}
             onClick={() => onLocationClick(loc)}
             className={`px-2 py-0.5 text-xs font-mono border transition-all ${
               loc === activeLocation
-                ? 'bg-blue-500/30 border-blue-400 text-blue-300'
-                : 'bg-black/40 border-white/10 text-white/50 hover:border-white/30 hover:text-white/80'
+                ? 'border-opacity-80 text-white'
+                : 'bg-black/50 border-white/15 text-white/50 hover:border-white/40 hover:text-white/80'
             }`}
-            style={{ imageRendering: 'pixelated' }}
+            style={loc === activeLocation ? {
+              background: meta.ambientColor + '33',
+              borderColor: meta.ambientColor + 'AA',
+              color: meta.ambientColor,
+            } : {}}
           >
             {loc}
           </button>

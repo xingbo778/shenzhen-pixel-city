@@ -92,9 +92,11 @@ export const CHARACTER_PALETTES: CharPalette[] = [
 
 const _ = '' // transparent
 const H = 'hair', K = 'skin', S = 'shirt', P = 'pants', O = 'shoes', E = '#FFFFFF'
-type TC = typeof H | typeof K | typeof S | typeof P | typeof O | typeof E | typeof _
+const A = 'accent1', B = 'accent2' // accent colors for occupation-specific details
+type TC = typeof H | typeof K | typeof S | typeof P | typeof O | typeof E | typeof A | typeof B | typeof _
 
 function resolveTemplate(template: TC[][], palette: CharPalette): SpriteData {
+  const opal = palette as OccupationPalette
   return template.map(row => row.map(cell => {
     if (cell === _) return ''
     if (cell === E) return E
@@ -103,6 +105,8 @@ function resolveTemplate(template: TC[][], palette: CharPalette): SpriteData {
     if (cell === S) return palette.shirt
     if (cell === P) return palette.pants
     if (cell === O) return palette.shoes
+    if (cell === A) return opal.accent1 ?? palette.shirt
+    if (cell === B) return opal.accent2 ?? palette.hair
     return cell
   }))
 }
@@ -544,6 +548,168 @@ export function getOccupationLabel(occupation?: string): string {
   return (OCCUPATION_PALETTES[key] ?? OCCUPATION_PALETTES.default).label
 }
 
+// ── Occupation-specific sprite templates ──────────────────────────────────
+// Delivery rider: yellow helmet (A=accent1=#FFD700) + blue jacket (S)
+// 16x24 grid, A=helmet/accent, B=backpack/box
+const DELIVERY_WALK_DOWN_1: TC[][] = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,A,A,A,A,A,A,_,_,_,_,_],
+  [_,_,_,_,A,A,A,A,A,A,A,A,_,_,_,_],
+  [_,_,_,_,A,A,K,K,K,K,A,A,_,_,_,_],
+  [_,_,_,_,A,A,K,E,E,K,A,A,_,_,_,_],
+  [_,_,_,_,_,A,K,K,K,K,A,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,K,S,S,S,S,S,S,K,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,_,_,P,P,P,P,_,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,P,P,_,_,_,_,P,P,_,_,_,_],
+  [_,_,_,_,P,P,_,_,_,_,P,P,_,_,_,_],
+  [_,_,_,_,O,O,_,_,_,_,_,O,O,_,_,_],
+  [_,_,_,_,O,O,_,_,_,_,_,O,O,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const DELIVERY_WALK_DOWN_2: TC[][] = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,A,A,A,A,A,A,_,_,_,_,_],
+  [_,_,_,_,A,A,A,A,A,A,A,A,_,_,_,_],
+  [_,_,_,_,A,A,K,K,K,K,A,A,_,_,_,_],
+  [_,_,_,_,A,A,K,E,E,K,A,A,_,_,_,_],
+  [_,_,_,_,_,A,K,K,K,K,A,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,K,S,S,S,S,S,S,K,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,_,_,P,P,P,P,_,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,_,_,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,_,_,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,_,_,P,P,_,_,_,_,_],
+  [_,_,_,_,_,O,O,_,_,O,O,_,_,_,_,_],
+  [_,_,_,_,_,O,O,_,_,O,O,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const DELIVERY_WALK_DOWN_3: TC[][] = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,A,A,A,A,A,A,_,_,_,_,_],
+  [_,_,_,_,A,A,A,A,A,A,A,A,_,_,_,_],
+  [_,_,_,_,A,A,K,K,K,K,A,A,_,_,_,_],
+  [_,_,_,_,A,A,K,E,E,K,A,A,_,_,_,_],
+  [_,_,_,_,_,A,K,K,K,K,A,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,K,S,S,S,S,S,S,K,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,_,_,P,P,P,P,_,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,O,O,_,_,_,_,_,_,P,P,_,_,_],
+  [_,_,_,O,O,_,_,_,_,_,_,P,P,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,O,O,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,O,O,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// Programmer: dark hoodie with cap (A=cap=#1A1A2A)
+const PROGRAMMER_WALK_DOWN_1: TC[][] = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,A,A,A,A,A,A,_,_,_,_,_],
+  [_,_,_,_,A,A,A,A,A,A,A,A,_,_,_,_],
+  [_,_,_,_,A,A,H,H,H,H,A,A,_,_,_,_],
+  [_,_,_,_,_,A,K,K,K,K,A,_,_,_,_,_],
+  [_,_,_,_,_,_,K,E,K,E,K,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,K,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,K,S,S,S,S,S,S,K,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,_,_,P,P,P,P,_,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,P,P,_,_,_,_,P,P,_,_,_,_],
+  [_,_,_,_,P,P,_,_,_,_,P,P,_,_,_,_],
+  [_,_,_,_,O,O,_,_,_,_,_,O,O,_,_,_],
+  [_,_,_,_,O,O,_,_,_,_,_,O,O,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const PROGRAMMER_WALK_DOWN_2: TC[][] = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,A,A,A,A,A,A,_,_,_,_,_],
+  [_,_,_,_,A,A,A,A,A,A,A,A,_,_,_,_],
+  [_,_,_,_,A,A,H,H,H,H,A,A,_,_,_,_],
+  [_,_,_,_,_,A,K,K,K,K,A,_,_,_,_,_],
+  [_,_,_,_,_,_,K,E,K,E,K,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,K,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,K,S,S,S,S,S,S,K,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,_,_,P,P,P,P,_,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,_,_,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,_,_,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,_,_,P,P,_,_,_,_,_],
+  [_,_,_,_,_,O,O,_,_,O,O,_,_,_,_,_],
+  [_,_,_,_,_,O,O,_,_,O,O,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const PROGRAMMER_WALK_DOWN_3: TC[][] = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,A,A,A,A,A,A,_,_,_,_,_],
+  [_,_,_,_,A,A,A,A,A,A,A,A,_,_,_,_],
+  [_,_,_,_,A,A,H,H,H,H,A,A,_,_,_,_],
+  [_,_,_,_,_,A,K,K,K,K,A,_,_,_,_,_],
+  [_,_,_,_,_,_,K,E,K,E,K,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,K,_,_,_,_,_],
+  [_,_,_,_,_,_,K,K,K,K,_,_,_,_,_,_],
+  [_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,S,S,S,S,S,S,S,S,_,_,_,_],
+  [_,_,_,_,K,S,S,S,S,S,S,K,_,_,_,_],
+  [_,_,_,_,_,S,S,S,S,S,S,_,_,_,_,_],
+  [_,_,_,_,_,_,P,P,P,P,_,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,_,_,P,P,P,P,P,P,_,_,_,_,_],
+  [_,_,_,O,O,_,_,_,_,_,_,P,P,_,_,_],
+  [_,_,_,O,O,_,_,_,_,_,_,P,P,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,O,O,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,O,O,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
 // Occupation-based sprite cache (by occupation key)
 const occupationSpriteCache = new Map<string, CharacterSprites>()
 
@@ -556,15 +722,23 @@ export function getOccupationSprites(occupation?: string): CharacterSprites {
   const r = (t: TC[][]) => resolveTemplate(t, pal)
   const rf = (t: TC[][]) => resolveTemplate(flipHorizontal(t), pal)
 
+  // Use occupation-specific templates for distinctive characters
+  let downFrames: [TC[][], TC[][], TC[][], TC[][]] = [CHAR_WALK_DOWN_1, CHAR_WALK_DOWN_2, CHAR_WALK_DOWN_3, CHAR_WALK_DOWN_2]
+  if (key === 'delivery_rider') {
+    downFrames = [DELIVERY_WALK_DOWN_1, DELIVERY_WALK_DOWN_2, DELIVERY_WALK_DOWN_3, DELIVERY_WALK_DOWN_2]
+  } else if (key === 'programmer') {
+    downFrames = [PROGRAMMER_WALK_DOWN_1, PROGRAMMER_WALK_DOWN_2, PROGRAMMER_WALK_DOWN_3, PROGRAMMER_WALK_DOWN_2]
+  }
+
   const sprites: CharacterSprites = {
     walk: {
-      down:  [r(CHAR_WALK_DOWN_1),  r(CHAR_WALK_DOWN_2),  r(CHAR_WALK_DOWN_3),  r(CHAR_WALK_DOWN_2)],
+      down:  [r(downFrames[0]), r(downFrames[1]), r(downFrames[2]), r(downFrames[3])],
       up:    [r(CHAR_WALK_UP_1),    r(CHAR_WALK_UP_2),    r(CHAR_WALK_UP_3),    r(CHAR_WALK_UP_2)],
       right: [r(CHAR_WALK_RIGHT_1), r(CHAR_WALK_RIGHT_2), r(CHAR_WALK_RIGHT_3), r(CHAR_WALK_RIGHT_2)],
       left:  [rf(CHAR_WALK_RIGHT_1),rf(CHAR_WALK_RIGHT_2),rf(CHAR_WALK_RIGHT_3),rf(CHAR_WALK_RIGHT_2)],
     },
     idle: {
-      down:  r(CHAR_IDLE_DOWN),
+      down:  r(key === 'delivery_rider' ? DELIVERY_WALK_DOWN_2 : key === 'programmer' ? PROGRAMMER_WALK_DOWN_2 : CHAR_IDLE_DOWN),
       up:    r(CHAR_WALK_UP_2),
       right: r(CHAR_WALK_RIGHT_2),
       left:  rf(CHAR_WALK_RIGHT_2),

@@ -1,42 +1,65 @@
 /**
  * CityOverviewMap - 深圳全城鸟瞰图
- * 展示7个地点的相对位置，Bot 以彩色光点显示
- * 点击地点进入放大场景（CSS scale 动画）
+ * 使用设计图 szpc_overview_map.png 作为背景
+ * 在各场景区域叠加可点击热区 + Bot 光点
  *
  * 设计哲学：城市运营中心（NOC Dashboard）风格
- * - 深色底 #060b14，科技蓝网格线
- * - 每个地点有独特的像素建筑轮廓
- * - Bot 光点有呼吸动画
+ * 深色背景 #0d1117，设计图作为主视觉
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react'
 import type { WorldState } from '@/types/world'
 import { BOT_COLORS } from '@/types/world'
 
-// Location positions on the overview map (normalized 0-1)
-export const OVERVIEW_LOCATIONS: Record<string, {
-  x: number; y: number; label: string; color: string; icon: string
-}> = {
-  'baoan_urban_village': { x: 0.12, y: 0.55, label: '宝安城中村', color: '#FF8C42', icon: '🏘️' },
-  'nanshan_tech_park':   { x: 0.28, y: 0.35, label: '南山科技园', color: '#4D96FF', icon: '🏢' },
-  'futian_cbd':          { x: 0.52, y: 0.28, label: '福田CBD',    color: '#FFD700', icon: '🏙️' },
-  'huaqiangbei':         { x: 0.62, y: 0.45, label: '华强北',     color: '#FF4D6D', icon: '📱' },
-  'dongmen_oldstreet':   { x: 0.72, y: 0.60, label: '东门老街',   color: '#FF6B6B', icon: '🏮' },
-  'nanshan_apartments':  { x: 0.35, y: 0.65, label: '南山公寓',   color: '#69DB7C', icon: '🏠' },
-  'shenzhen_bay_park':   { x: 0.22, y: 0.80, label: '深圳湾公园', color: '#74C0FC', icon: '🌊' },
-}
+// CDN URLs for scene images (uploaded via manus-upload-file)
+const OVERVIEW_MAP_URL = 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/lWxSeVupnykEUilP.jpg'
 
-// Road connections between locations
-const ROADS: [string, string][] = [
-  ['baoan_urban_village', 'nanshan_tech_park'],
-  ['nanshan_tech_park', 'futian_cbd'],
-  ['futian_cbd', 'huaqiangbei'],
-  ['huaqiangbei', 'dongmen_oldstreet'],
-  ['nanshan_tech_park', 'nanshan_apartments'],
-  ['nanshan_apartments', 'shenzhen_bay_park'],
-  ['baoan_urban_village', 'shenzhen_bay_park'],
-  ['nanshan_apartments', 'futian_cbd'],
-]
+// Location hit regions on the overview map image
+// The overview map image is 1456x816, these are normalized (0-1) bounding boxes [x, y, w, h]
+// Based on visual analysis of szpc_overview_map.png
+export const OVERVIEW_LOCATIONS: Record<string, {
+  // Center point for Bot dots (normalized 0-1 of image)
+  cx: number; cy: number
+  // Hit box (normalized)
+  x: number; y: number; w: number; h: number
+  label: string; color: string; icon: string
+}> = {
+  'baoan_urban_village': {
+    cx: 0.155, cy: 0.195,
+    x: 0.02,  y: 0.01,  w: 0.27, h: 0.38,
+    label: '城中村', color: '#C4956A', icon: '🏘️'
+  },
+  'nanshan_tech_park': {
+    cx: 0.155, cy: 0.53,
+    x: 0.02,  y: 0.39,  w: 0.27, h: 0.28,
+    label: '科技园', color: '#4D96FF', icon: '🏢'
+  },
+  'futian_cbd': {
+    cx: 0.46,  cy: 0.42,
+    x: 0.30,  y: 0.01,  w: 0.35, h: 0.75,
+    label: 'Futian CBD', color: '#FFD700', icon: '🏙️'
+  },
+  'huaqiangbei': {
+    cx: 0.80,  cy: 0.30,
+    x: 0.66,  y: 0.01,  w: 0.33, h: 0.48,
+    label: '华强北', color: '#FF4DC8', icon: '📱'
+  },
+  'dongmen_oldstreet': {
+    cx: 0.80,  cy: 0.68,
+    x: 0.66,  y: 0.50,  w: 0.33, h: 0.48,
+    label: '东门老街', color: '#FF6B6B', icon: '🏮'
+  },
+  'nanshan_apartments': {
+    cx: 0.155, cy: 0.77,
+    x: 0.02,  y: 0.68,  w: 0.27, h: 0.30,
+    label: '南山公寓', color: '#69DB7C', icon: '🏠'
+  },
+  'shenzhen_bay_park': {
+    cx: 0.46,  cy: 0.82,
+    x: 0.30,  y: 0.77,  w: 0.35, h: 0.22,
+    label: '深圳湾公园', color: '#74C0FC', icon: '🌊'
+  },
+}
 
 interface Props {
   world: WorldState | null
@@ -50,6 +73,16 @@ export default function CityOverviewMap({ world, onLocationSelect }: Props) {
   const lastTimeRef = useRef(0)
   const [hoveredLocation, setHoveredLocation] = useState<string | null>(null)
   const hoveredRef = useRef<string | null>(null)
+  const bgImageRef = useRef<HTMLImageElement | null>(null)
+  const bgLoadedRef = useRef(false)
+
+  // Preload background image
+  useEffect(() => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => { bgLoadedRef.current = true; bgImageRef.current = img }
+    img.src = OVERVIEW_MAP_URL
+  }, [])
 
   // Count bots per location
   const botsByLocation = useCallback((): Record<string, string[]> => {
@@ -83,159 +116,120 @@ export default function CityOverviewMap({ world, onLocationSelect }: Props) {
       const dt = Math.min((ts - lastTimeRef.current) / 1000, 0.05)
       lastTimeRef.current = ts
       timeRef.current += dt
-
       const t = timeRef.current
+
       const W = canvas!.getBoundingClientRect().width
       const H = canvas!.getBoundingClientRect().height
 
       // Background
-      ctx.fillStyle = '#060b14'
+      ctx.fillStyle = '#0d1117'
       ctx.fillRect(0, 0, W, H)
 
-      // Grid lines
-      ctx.strokeStyle = 'rgba(77,150,255,0.06)'
-      ctx.lineWidth = 1
-      const gridSize = 32
-      for (let x = 0; x < W; x += gridSize) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
-      }
-      for (let y = 0; y < H; y += gridSize) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
-      }
-
-      // City name watermark
-      ctx.fillStyle = 'rgba(77,150,255,0.04)'
-      ctx.font = 'bold 80px "Orbitron", monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('SHENZHEN', W / 2, H / 2 + 30)
-
-      // Draw roads
-      ctx.lineWidth = 2
-      ROADS.forEach(([a, b]) => {
-        const la = OVERVIEW_LOCATIONS[a]
-        const lb = OVERVIEW_LOCATIONS[b]
-        if (!la || !lb) return
-        const ax = la.x * W, ay = la.y * H
-        const bx = lb.x * W, by = lb.y * H
-        const grad = ctx.createLinearGradient(ax, ay, bx, by)
-        grad.addColorStop(0, 'rgba(77,150,255,0.15)')
-        grad.addColorStop(0.5, 'rgba(77,150,255,0.3)')
-        grad.addColorStop(1, 'rgba(77,150,255,0.15)')
-        ctx.strokeStyle = grad
-        ctx.setLineDash([4, 6])
-        ctx.beginPath()
-        ctx.moveTo(ax, ay)
-        ctx.lineTo(bx, by)
-        ctx.stroke()
-        ctx.setLineDash([])
-      })
-
-      // Draw locations
-      const bots = botsByLocation()
-      Object.entries(OVERVIEW_LOCATIONS).forEach(([key, loc]) => {
-        const x = loc.x * W
-        const y = loc.y * H
-        const isHovered = hoveredRef.current === key
-        const botList = bots[key] || []
-        const hasBots = botList.length > 0
-
-        // Pulse ring
-        const pulse = Math.sin(t * 2 + loc.x * 5) * 0.5 + 0.5
-        const ringR = 20 + pulse * 8
-        ctx.strokeStyle = loc.color + '44'
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.arc(x, y, ringR, 0, Math.PI * 2)
-        ctx.stroke()
-
-        // Outer ring (hovered)
-        if (isHovered) {
-          ctx.strokeStyle = loc.color + 'AA'
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.arc(x, y, 26, 0, Math.PI * 2)
-          ctx.stroke()
+      // Draw overview map image (letterboxed / cover)
+      if (bgLoadedRef.current && bgImageRef.current) {
+        const img = bgImageRef.current
+        // Scale to cover canvas maintaining aspect ratio
+        const imgAspect = img.width / img.height
+        const canvasAspect = W / H
+        let drawW: number, drawH: number, drawX: number, drawY: number
+        if (canvasAspect > imgAspect) {
+          drawW = W
+          drawH = W / imgAspect
+          drawX = 0
+          drawY = (H - drawH) / 2
+        } else {
+          drawH = H
+          drawW = H * imgAspect
+          drawX = (W - drawW) / 2
+          drawY = 0
         }
+        ctx.drawImage(img, drawX, drawY, drawW, drawH)
 
-        // Location dot
-        const dotR = isHovered ? 14 : 10
-        const grad = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, dotR)
-        grad.addColorStop(0, loc.color + 'FF')
-        grad.addColorStop(1, loc.color + '88')
-        ctx.fillStyle = grad
-        ctx.beginPath()
-        ctx.arc(x, y, dotR, 0, Math.PI * 2)
-        ctx.fill()
+        // Draw hover highlight + bot dots on each location
+        const bots = botsByLocation()
+        Object.entries(OVERVIEW_LOCATIONS).forEach(([key, loc]) => {
+          const rx = drawX + loc.x * drawW
+          const ry = drawY + loc.y * drawH
+          const rw = loc.w * drawW
+          const rh = loc.h * drawH
+          const cx = drawX + loc.cx * drawW
+          const cy = drawY + loc.cy * drawH
+          const isHovered = hoveredRef.current === key
+          const botList = bots[key] || []
 
-        // Inner bright core
-        ctx.fillStyle = '#FFFFFF'
-        ctx.beginPath()
-        ctx.arc(x - 2, y - 2, 3, 0, Math.PI * 2)
-        ctx.fill()
+          // Hover highlight overlay
+          if (isHovered) {
+            ctx.fillStyle = 'rgba(255,255,255,0.12)'
+            ctx.strokeStyle = loc.color + 'CC'
+            ctx.lineWidth = 2
+            ctx.fillRect(rx, ry, rw, rh)
+            ctx.strokeRect(rx, ry, rw, rh)
 
-        // Bot count badge
-        if (hasBots) {
-          ctx.fillStyle = '#FF4D6D'
-          ctx.beginPath()
-          ctx.arc(x + 8, y - 8, 7, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.fillStyle = '#FFFFFF'
-          ctx.font = 'bold 8px monospace'
-          ctx.textAlign = 'center'
-          ctx.fillText(String(botList.length), x + 8, y - 5)
-        }
+            // Location label
+            ctx.font = 'bold 13px "Noto Sans SC", sans-serif'
+            ctx.textAlign = 'center'
+            const labelW = ctx.measureText(loc.label).width + 16
+            ctx.fillStyle = 'rgba(0,0,0,0.75)'
+            ctx.fillRect(cx - labelW / 2, cy - 22, labelW, 18)
+            ctx.fillStyle = loc.color
+            ctx.fillText(loc.label, cx, cy - 8)
+          }
 
-        // Bot dots orbiting the location
-        botList.forEach((botId, i) => {
-          const angle = (t * 0.8 + i * (Math.PI * 2 / botList.length))
-          const orbitR = 18 + i * 3
-          const bx = x + Math.cos(angle) * orbitR
-          const by = y + Math.sin(angle) * orbitR
-          const botColor = BOT_COLORS[botId] || '#4D96FF'
-          ctx.fillStyle = botColor
-          ctx.beginPath()
-          ctx.arc(bx, by, 3, 0, Math.PI * 2)
-          ctx.fill()
-          // Glow
-          ctx.fillStyle = botColor + '44'
-          ctx.beginPath()
-          ctx.arc(bx, by, 5, 0, Math.PI * 2)
-          ctx.fill()
+          // Bot count badge (always visible if bots present)
+          if (botList.length > 0) {
+            // Pulsing ring
+            const pulse = Math.sin(t * 3 + loc.cx * 10) * 0.5 + 0.5
+            const ringR = 10 + pulse * 4
+            ctx.strokeStyle = loc.color + '66'
+            ctx.lineWidth = 1.5
+            ctx.beginPath()
+            ctx.arc(cx, cy, ringR, 0, Math.PI * 2)
+            ctx.stroke()
+
+            // Badge background
+            ctx.fillStyle = loc.color
+            ctx.beginPath()
+            ctx.arc(cx, cy, 9, 0, Math.PI * 2)
+            ctx.fill()
+
+            // Bot count
+            ctx.fillStyle = '#000'
+            ctx.font = 'bold 9px monospace'
+            ctx.textAlign = 'center'
+            ctx.fillText(String(botList.length), cx, cy + 3)
+
+            // Orbiting bot dots
+            botList.slice(0, 4).forEach((botId, i) => {
+              const angle = t * 1.2 + i * (Math.PI * 2 / Math.min(botList.length, 4))
+              const orbitR = 16 + i * 2
+              const bx = cx + Math.cos(angle) * orbitR
+              const by = cy + Math.sin(angle) * orbitR
+              const botColor = BOT_COLORS[botId] || '#4D96FF'
+              ctx.fillStyle = botColor
+              ctx.beginPath()
+              ctx.arc(bx, by, 2.5, 0, Math.PI * 2)
+              ctx.fill()
+            })
+          }
         })
-
-        // Label
-        ctx.fillStyle = isHovered ? '#FFFFFF' : 'rgba(200,220,255,0.8)'
-        ctx.font = isHovered ? 'bold 11px "Noto Sans SC", sans-serif' : '10px "Noto Sans SC", sans-serif'
+      } else {
+        // Loading state
+        ctx.fillStyle = 'rgba(77,150,255,0.5)'
+        ctx.font = '12px monospace'
         ctx.textAlign = 'center'
-        const labelY = y + dotR + 14
-        // Label background
-        const labelW = ctx.measureText(loc.label).width + 8
-        ctx.fillStyle = 'rgba(6,11,20,0.7)'
-        ctx.fillRect(x - labelW / 2, labelY - 10, labelW, 14)
-        ctx.fillStyle = isHovered ? loc.color : 'rgba(200,220,255,0.8)'
-        ctx.fillText(loc.label, x, labelY)
-      })
+        ctx.fillText('加载地图中...', W / 2, H / 2)
+      }
 
-      // Scan line effect
-      const scanY = (t * 80) % H
-      const scanGrad = ctx.createLinearGradient(0, scanY - 20, 0, scanY + 20)
-      scanGrad.addColorStop(0, 'rgba(77,150,255,0)')
-      scanGrad.addColorStop(0.5, 'rgba(77,150,255,0.04)')
-      scanGrad.addColorStop(1, 'rgba(77,150,255,0)')
-      ctx.fillStyle = scanGrad
-      ctx.fillRect(0, scanY - 20, W, 40)
-
-      // Title
-      ctx.fillStyle = 'rgba(77,150,255,0.6)'
-      ctx.font = '10px "Orbitron", monospace'
-      ctx.textAlign = 'left'
-      ctx.fillText('SHENZHEN CITY MAP', 12, 20)
-
-      // Click hint
-      ctx.fillStyle = 'rgba(77,150,255,0.4)'
-      ctx.font = '9px monospace'
-      ctx.textAlign = 'center'
-      ctx.fillText('点击地点进入场景', W / 2, H - 10)
+      // Scan line effect (subtle) - guard against H=0
+      if (H > 0) {
+        const scanY = (t * 60) % H
+        const scanGrad = ctx.createLinearGradient(0, scanY - 15, 0, scanY + 15)
+        scanGrad.addColorStop(0, 'rgba(77,150,255,0)')
+        scanGrad.addColorStop(0.5, 'rgba(77,150,255,0.03)')
+        scanGrad.addColorStop(1, 'rgba(77,150,255,0)')
+        ctx.fillStyle = scanGrad
+        ctx.fillRect(0, scanY - 15, W, 30)
+      }
 
       animFrameRef.current = requestAnimationFrame(render)
     }
@@ -247,26 +241,30 @@ export default function CityOverviewMap({ world, onLocationSelect }: Props) {
     }
   }, [botsByLocation])
 
+  // Convert mouse event to image-normalized coordinates, find hit location
   const getHitLocation = useCallback((e: React.MouseEvent<HTMLCanvasElement>): string | null => {
     const canvas = canvasRef.current
-    if (!canvas) return null
+    if (!canvas || !bgImageRef.current) return null
     const rect = canvas.getBoundingClientRect()
-    // 将归一化坐标转换为像素坐标进行距离计算，避免宽高比影响
-    const px = (e.clientX - rect.left)
-    const py = (e.clientY - rect.top)
-    const W = rect.width
-    const H = rect.height
-    const HIT_PX = 28  // 像素单位的点击半径
+    const W = rect.width, H = rect.height
+    const img = bgImageRef.current
+    const imgAspect = img.width / img.height
+    const canvasAspect = W / H
+    let drawW: number, drawH: number, drawX: number, drawY: number
+    if (canvasAspect > imgAspect) {
+      drawW = W; drawH = W / imgAspect; drawX = 0; drawY = (H - drawH) / 2
+    } else {
+      drawH = H; drawW = H * imgAspect; drawX = (W - drawW) / 2; drawY = 0
+    }
+    const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
+    // Normalize to image space
+    const nx = (px - drawX) / drawW
+    const ny = (py - drawY) / drawH
 
     let found: string | null = null
-    let minDist = Infinity
     Object.entries(OVERVIEW_LOCATIONS).forEach(([key, loc]) => {
-      const lx = loc.x * W
-      const ly = loc.y * H
-      const dx = px - lx, dy = py - ly
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < HIT_PX && dist < minDist) {
-        minDist = dist
+      if (nx >= loc.x && nx <= loc.x + loc.w && ny >= loc.y && ny <= loc.y + loc.h) {
         found = key
       }
     })
@@ -303,7 +301,7 @@ export default function CityOverviewMap({ world, onLocationSelect }: Props) {
           <div
             className="px-3 py-1 rounded text-xs font-mono border"
             style={{
-              background: 'rgba(6,11,20,0.9)',
+              background: 'rgba(13,17,23,0.9)',
               borderColor: OVERVIEW_LOCATIONS[hoveredLocation]?.color + '66',
               color: OVERVIEW_LOCATIONS[hoveredLocation]?.color,
             }}
