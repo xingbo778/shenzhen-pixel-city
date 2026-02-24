@@ -15,7 +15,7 @@ import {
   getCachedSprite, getOutlineSprite, getCharacterSprites, getFrameSprite,
   type SpriteData, type Direction, type CharState
 } from '@/engine/spriteSystem'
-import { SCENE_CONFIGS } from '@/engine/sceneTiles'
+import { SCENE_CONFIGS, TILE_COLORS, type TileType } from '@/engine/sceneTiles'
 
 const TILE_SIZE = 16   // pixels per tile (logical)
 const ZOOM = 3         // pixel scale factor (like pixel-agents zoom)
@@ -73,29 +73,112 @@ function createEmotionBubble(emoji: string): SpriteData {
 const _ = ''
 const BUBBLE_SPRITE = createEmotionBubble('')
 
-// ── Floor rendering ───────────────────────────────────────────────
-function drawFloor(
+// ── Tilemap rendering ─────────────────────────────────────────────
+function drawTilemap(
   ctx: CanvasRenderingContext2D,
-  cols: number, rows: number,
-  floorColor: string,
-  pattern: 'solid' | 'grid' | 'checker',
+  tilemap: TileType[][],
   offsetX: number, offsetY: number,
-  zoom: number
+  zoom: number,
+  time: number
 ) {
   const s = TILE_SIZE * zoom
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      let color = floorColor
-      if (pattern === 'checker' && (r + c) % 2 === 1) {
-        // slightly lighter alternate tile
-        color = lightenHex(floorColor, 15)
-      }
-      ctx.fillStyle = color
-      ctx.fillRect(offsetX + c * s, offsetY + r * s, s, s)
-      if (pattern === 'grid') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.04)'
-        ctx.lineWidth = 1
-        ctx.strokeRect(offsetX + c * s + 0.5, offsetY + r * s + 0.5, s - 1, s - 1)
+  for (let r = 0; r < tilemap.length; r++) {
+    const row = tilemap[r]
+    for (let c = 0; c < row.length; c++) {
+      const tile = row[c]
+      const tc = TILE_COLORS[tile]
+      const x = offsetX + c * s
+      const y = offsetY + r * s
+
+      // Base fill
+      ctx.fillStyle = tc.base
+      ctx.fillRect(x, y, s, s)
+
+      // Tile-specific rendering
+      if (tile === 'road_h') {
+        // Horizontal road with center dashes
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, s, 1)
+        ctx.fillRect(x, y + s - 1, s, 1)
+        // Yellow center line (every other tile)
+        if (c % 3 !== 2) {
+          ctx.fillStyle = tc.line!
+          ctx.fillRect(x + 1, y + Math.floor(s/2) - 1, s - 2, 2)
+        }
+      } else if (tile === 'road_v') {
+        // Vertical road
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, 1, s)
+        ctx.fillRect(x + s - 1, y, 1, s)
+        if (r % 3 !== 2) {
+          ctx.fillStyle = tc.line!
+          ctx.fillRect(x + Math.floor(s/2) - 1, y + 1, 2, s - 2)
+        }
+      } else if (tile === 'road_cross') {
+        // Intersection: zebra crossing marks
+        ctx.fillStyle = tc.line!
+        for (let i = 0; i < 3; i++) {
+          ctx.fillRect(x + 1 + i * Math.floor(s/3), y + 1, Math.floor(s/4), s - 2)
+        }
+      } else if (tile === 'sidewalk' || tile === 'sidewalk_edge') {
+        // Sidewalk with subtle grid
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, s, 1)
+        ctx.fillRect(x, y, 1, s)
+        if (tile === 'sidewalk_edge') {
+          ctx.fillStyle = tc.line!
+          ctx.fillRect(x, y + s - 2, s, 2)
+        }
+      } else if (tile === 'grass' || tile === 'grass_dark') {
+        // Grass with subtle texture
+        ctx.fillStyle = tc.detail!
+        if ((r + c) % 3 === 0) ctx.fillRect(x + 2, y + 2, 2, 2)
+        if ((r + c) % 5 === 1) ctx.fillRect(x + s - 4, y + s - 4, 2, 2)
+      } else if (tile === 'water' || tile === 'water_edge') {
+        // Animated water shimmer
+        const wave = Math.sin(time * 1.5 + c * 0.5 + r * 0.3) * 0.5 + 0.5
+        ctx.fillStyle = tc.detail!
+        ctx.globalAlpha = 0.3 + wave * 0.2
+        ctx.fillRect(x, y + Math.floor(s * 0.3), s, 2)
+        ctx.fillRect(x, y + Math.floor(s * 0.7), s, 2)
+        ctx.globalAlpha = 1
+        if (tile === 'water_edge') {
+          ctx.fillStyle = tc.line!
+          ctx.fillRect(x, y, s, 2)
+        }
+      } else if (tile === 'tile_checker') {
+        // Checker pattern
+        if ((r + c) % 2 === 1) {
+          ctx.fillStyle = tc.detail!
+          ctx.fillRect(x, y, s, s)
+        }
+      } else if (tile === 'tile_floor') {
+        // Floor tiles with grout lines
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, s, 1)
+        ctx.fillRect(x, y, 1, s)
+      } else if (tile === 'plaza') {
+        // Plaza with decorative pattern
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, s, 1)
+        ctx.fillRect(x, y, 1, s)
+        if ((r + c) % 4 === 0) {
+          ctx.fillStyle = tc.line!
+          ctx.fillRect(x + Math.floor(s/2) - 1, y + Math.floor(s/2) - 1, 2, 2)
+        }
+      } else if (tile === 'park_path') {
+        // Park path with edge detail
+        ctx.fillStyle = tc.detail!
+        ctx.fillRect(x, y, s, 1)
+        ctx.fillRect(x, y + s - 1, s, 1)
+        if (tc.line) {
+          ctx.fillStyle = tc.line
+          ctx.fillRect(x + 1, y + 1, s - 2, 1)
+        }
+      } else if (tile === 'building') {
+        // Building footprint (dark, no detail)
+        ctx.fillStyle = '#111120'
+        ctx.fillRect(x, y, s, s)
       }
     }
   }
@@ -108,24 +191,49 @@ function lightenHex(hex: string, amount: number): string {
   return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
 }
 
-// ── Bot tile assignment (spread bots across walkable tiles) ───────
-const BOT_TILE_OFFSETS = [
-  { col: 3, row: 9 }, { col: 7, row: 10 }, { col: 11, row: 9 }, { col: 15, row: 10 },
-  { col: 5, row: 11 }, { col: 9, row: 12 }, { col: 13, row: 11 }, { col: 17, row: 12 },
-  { col: 2, row: 13 }, { col: 6, row: 13 }, { col: 10, row: 13 }, { col: 14, row: 13 },
-]
+// ── Walkable tile check (bots can walk on roads, sidewalks, plazas, grass, paths) ───
+const WALKABLE_TILES = new Set<TileType>([
+  'road_h', 'road_v', 'road_cross', 'road_tl', 'road_tr', 'road_bl', 'road_br',
+  'sidewalk', 'sidewalk_edge', 'grass', 'grass_dark', 'concrete',
+  'tile_floor', 'tile_checker', 'park_path', 'plaza', 'sand',
+])
+
+function getWalkableTiles(tilemap: TileType[][]): { col: number; row: number }[] {
+  const tiles: { col: number; row: number }[] = []
+  for (let r = 0; r < tilemap.length; r++) {
+    for (let c = 0; c < tilemap[r].length; c++) {
+      if (WALKABLE_TILES.has(tilemap[r][c])) {
+        tiles.push({ col: c, row: r })
+      }
+    }
+  }
+  return tiles
+}
 
 function assignBotTiles(
-  botIds: string[], cols: number, rows: number
+  botIds: string[], tilemap: TileType[][], cols: number, rows: number
 ): Record<string, { col: number; row: number }> {
+  const walkable = getWalkableTiles(tilemap)
   const result: Record<string, { col: number; row: number }> = {}
+  if (walkable.length === 0) {
+    // fallback
+    botIds.forEach((id, i) => {
+      result[id] = { col: 2 + (i % (cols - 4)), row: Math.floor(rows * 0.7) }
+    })
+    return result
+  }
   botIds.forEach((id, i) => {
-    const offset = BOT_TILE_OFFSETS[i % BOT_TILE_OFFSETS.length]
-    const col = Math.min(cols - 2, offset.col)
-    const row = Math.min(rows - 1, offset.row)
-    result[id] = { col, row }
+    // Spread evenly across walkable tiles
+    const idx = Math.floor((i / botIds.length) * walkable.length)
+    result[id] = walkable[idx % walkable.length]
   })
   return result
+}
+
+function getRandomWalkableTile(tilemap: TileType[][]): { col: number; row: number } | null {
+  const walkable = getWalkableTiles(tilemap)
+  if (walkable.length === 0) return null
+  return walkable[Math.floor(Math.random() * walkable.length)]
 }
 
 export default function PixelCityMap({
@@ -149,21 +257,21 @@ export default function PixelCityMap({
     // Show ALL bots on the map (not filtered by location)
     // Bots at current location wander freely; others are shown as visitors
     const allBotIds = Object.keys(world.bots).filter(id => world.bots[id].status === 'alive')
-    const assignments = assignBotTiles(allBotIds, scene.cols, scene.rows)
+    const assignments = assignBotTiles(allBotIds, scene.tilemap, scene.cols, scene.rows)
 
     allBotIds.forEach((botId, i) => {
       const bot = world.bots[botId]
       if (!bot) return
       const assign = assignments[botId]
 
-      // Bots at current location get random wander targets
+      // Bots at current location get random walkable-tile targets
       const isHere = bot.location === activeLocation
-      const wanderCol = isHere
-        ? 2 + Math.floor(Math.random() * (scene.cols - 4))
-        : assign.col
-      const wanderRow = isHere
-        ? Math.floor(scene.rows * 0.55) + Math.floor(Math.random() * Math.floor(scene.rows * 0.4))
-        : assign.row
+      let wanderCol = assign.col
+      let wanderRow = assign.row
+      if (isHere) {
+        const wt = getRandomWalkableTile(scene.tilemap)
+        if (wt) { wanderCol = wt.col; wanderRow = wt.row }
+      }
 
       const tx = wanderCol * TILE_SIZE + TILE_SIZE / 2
       const ty = wanderRow * TILE_SIZE + TILE_SIZE / 2
@@ -246,8 +354,8 @@ export default function PixelCityMap({
     const offsetX = Math.floor((cssW - sceneW) / 2)
     const offsetY = Math.floor((cssH - sceneH) / 2)
 
-    // ── Floor tiles (pixel-agents renderTileGrid style) ─────────
-    drawFloor(ctx, scene.cols, scene.rows, scene.floorColor, scene.floorPattern, offsetX, offsetY, ZOOM)
+    // ── Tilemap (pixel-agents renderTileGrid style) ────────────
+    drawTilemap(ctx, scene.tilemap, offsetX, offsetY, ZOOM, timestamp / 1000)
 
     // ── Ambient light overlay ───────────────────────────────────
     const pulse = Math.sin(pulseRef.current)
@@ -281,16 +389,17 @@ export default function PixelCityMap({
       // Update animation
       bs.frameTimer += dt
 
-      // Auto-wander: give idle bots new random targets periodically
+      // Auto-wander: give idle bots new random walkable-tile targets
       if (bs.state === 'idle') {
         bs.wanderTimer = (bs.wanderTimer ?? 0) + dt
         if (bs.wanderTimer > WANDER_INTERVAL + Math.random() * 2) {
           bs.wanderTimer = 0
-          const newCol = 2 + Math.floor(Math.random() * (scene.cols - 4))
-          const newRow = Math.floor(scene.rows * 0.5) + Math.floor(Math.random() * Math.floor(scene.rows * 0.45))
-          bs.targetX = newCol * TILE_SIZE + TILE_SIZE / 2
-          bs.targetY = newRow * TILE_SIZE + TILE_SIZE / 2
-          bs.state = 'walk'
+          const wt = getRandomWalkableTile(scene.tilemap)
+          if (wt) {
+            bs.targetX = wt.col * TILE_SIZE + TILE_SIZE / 2
+            bs.targetY = wt.row * TILE_SIZE + TILE_SIZE / 2
+            bs.state = 'walk'
+          }
         }
       }
 

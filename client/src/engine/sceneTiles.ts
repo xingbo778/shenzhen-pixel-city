@@ -1,135 +1,318 @@
 /**
- * 深圳像素城市 - 场景瓦片系统
- * 移植 pixel-agents 的 SpriteData 点阵风格
- * 每个地点有独立的建筑精灵和地面颜色
+ * 深圳像素城市 - 瓦片地图系统
+ * 设计哲学：城市运营中心 NOC Dashboard
+ * 每个场景用 tilemap 定义，每格有具体类型（道路/人行道/草地/建筑/水面）
+ * 建筑物用像素点阵精灵绘制，道路有中线和斑马线
  */
 
-import type { SpriteData } from './spriteSystem'
+// ── Tile Types ────────────────────────────────────────────────────
+export type TileType =
+  | 'road_h'        // 水平道路
+  | 'road_v'        // 垂直道路
+  | 'road_cross'    // 十字路口
+  | 'road_tl'       // 路口（左上）
+  | 'road_tr'       // 路口（右上）
+  | 'road_bl'       // 路口（左下）
+  | 'road_br'       // 路口（右下）
+  | 'sidewalk'      // 人行道
+  | 'sidewalk_edge' // 人行道边缘（有路缘石）
+  | 'grass'         // 草地
+  | 'grass_dark'    // 深草地
+  | 'water'         // 水面
+  | 'water_edge'    // 水边
+  | 'concrete'      // 水泥地
+  | 'tile_floor'    // 瓷砖地面（室内）
+  | 'tile_checker'  // 棋盘格
+  | 'sand'          // 沙地
+  | 'building'      // 建筑占位（不可走）
+  | 'park_path'     // 公园小路
+  | 'plaza'         // 广场地砖
 
-// ── Floor Tile Colors ────────────────────────────────────────────
-
-export const FLOOR_COLORS = {
-  concrete:   '#2A2A3A',  // 水泥地
-  grass:      '#1A3A1A',  // 草地
-  wood:       '#3A2A1A',  // 木地板
-  tile_white: '#3A3A4A',  // 白瓷砖
-  tile_dark:  '#1A1A2A',  // 深色瓷砖
-  sand:       '#3A3020',  // 沙地
-  water:      '#0A1A3A',  // 水面
-  road:       '#252530',  // 道路
+// ── Tile Color Palettes ───────────────────────────────────────────
+export const TILE_COLORS: Record<TileType, { base: string; detail?: string; line?: string }> = {
+  road_h:        { base: '#1E1E28', detail: '#2A2A38', line: '#FFDD00' },
+  road_v:        { base: '#1E1E28', detail: '#2A2A38', line: '#FFDD00' },
+  road_cross:    { base: '#1E1E28', detail: '#2A2A38', line: '#FFFFFF' },
+  road_tl:       { base: '#1E1E28', detail: '#2A2A38' },
+  road_tr:       { base: '#1E1E28', detail: '#2A2A38' },
+  road_bl:       { base: '#1E1E28', detail: '#2A2A38' },
+  road_br:       { base: '#1E1E28', detail: '#2A2A38' },
+  sidewalk:      { base: '#3A3A48', detail: '#44444E' },
+  sidewalk_edge: { base: '#3A3A48', detail: '#555560', line: '#666670' },
+  grass:         { base: '#1C3A1C', detail: '#244424' },
+  grass_dark:    { base: '#142A14', detail: '#1C341C' },
+  water:         { base: '#0A1A3A', detail: '#0E2248', line: '#1A3A6A' },
+  water_edge:    { base: '#0A1A3A', detail: '#1A2A4A', line: '#2A4A7A' },
+  concrete:      { base: '#2A2A38', detail: '#303040' },
+  tile_floor:    { base: '#2E2E3E', detail: '#363648' },
+  tile_checker:  { base: '#282838', detail: '#323244' },
+  sand:          { base: '#3A3020', detail: '#443828' },
+  building:      { base: '#1A1A28', detail: '#1A1A28' },
+  park_path:     { base: '#2E2818', detail: '#382E1E', line: '#443A24' },
+  plaza:         { base: '#303040', detail: '#3A3A4C', line: '#444456' },
 }
 
+// ── Tile Map Layout ───────────────────────────────────────────────
+// Each scene is a 2D array of TileType
+// Abbreviations for compact notation:
+const R = 'road_h' as TileType
+const V = 'road_v' as TileType
+const X = 'road_cross' as TileType
+const S = 'sidewalk' as TileType
+const E = 'sidewalk_edge' as TileType
+const G = 'grass' as TileType
+const K = 'grass_dark' as TileType
+const W = 'water' as TileType
+const A = 'water_edge' as TileType
+const C = 'concrete' as TileType
+const T = 'tile_floor' as TileType
+const H = 'tile_checker' as TileType
+const B = 'building' as TileType
+const P = 'park_path' as TileType
+const Z = 'plaza' as TileType
+
+// ── Scene Tilemap Definitions ─────────────────────────────────────
+
+/** 宝安城中村：密集握手楼，窄巷，水泥地 */
+const VILLAGE_MAP: TileType[][] = [
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [R,R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R,R,R,X,R,R,R,R],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [R,R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R,R,R,X,R,R,R,R],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,V,C,C,C,C],
+  [S,S,S,S,E,S,S,S,S,S,S,S,E,S,S,S,S,S,S,E,S,S,S,S],
+  [R,R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R,R,R,X,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+]
+
+/** 南山科技园：宽阔马路，广场，写字楼 */
+const TECH_MAP: TileType[][] = [
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H],
+  [H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H],
+  [H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T],
+]
+
+/** 福田CBD：超宽马路，高楼，地铁 */
+const CBD_MAP: TileType[][] = [
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H],
+  [H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H,H],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+]
+
+/** 华强北：密集商铺，小巷，电子市场 */
+const HUAQIANG_MAP: TileType[][] = [
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+  [C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C],
+  [C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C],
+  [R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R],
+  [C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C],
+  [C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C,C,C,C,V,C,C,C,C],
+  [S,S,S,E,S,S,S,S,S,S,S,E,S,S,S,S,S,S,S,E,S,S,S,S],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S],
+]
+
+/** 东门老街：石板路，老街巷，红灯笼 */
+const DONGMEN_MAP: TileType[][] = [
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+  [P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P],
+  [P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P],
+  [R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R,R,R,R,X,R,R,R,R],
+  [P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P],
+  [P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P,P,P,P,V,P,P,P,P],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C,C],
+]
+
+/** 南山公寓：住宅区，绿化带，小路 */
+const APARTMENT_MAP: TileType[][] = [
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B],
+  [G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G],
+  [G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G],
+  [G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G],
+  [G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G],
+]
+
+/** 深圳湾公园：草地，海边，小路，树木 */
+const PARK_MAP: TileType[][] = [
+  [K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P,P],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [K,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,K],
+  [A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A,A],
+  [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
+  [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
+  [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
+  [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
+  [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
+  [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
+]
+
 // ── Building Sprites (pixel-agents 风格点阵) ─────────────────────
+import type { SpriteData } from './spriteSystem'
 
 const _ = ''
 
 /** 高层写字楼 (24x32) - 南山科技园 / 福田CBD */
 export const OFFICE_TOWER: SpriteData = (() => {
-  const W = '#8899BB'  // 玻璃幕墙
-  const L = '#AABBDD'  // 反光
-  const D = '#445566'  // 暗面
-  const F = '#334455'  // 框架
-  const G = '#CCDDFF'  // 发光窗
+  const Wc = '#8899BB', L = '#AABBDD', D = '#445566', F = '#334455', Gc = '#CCDDFF'
   const rows: string[][] = []
-  // 顶部天线
   rows.push([_,_,_,_,_,_,_,_,_,_,_,F,F,_,_,_,_,_,_,_,_,_,_,_])
   rows.push([_,_,_,_,_,_,_,_,_,_,_,F,F,_,_,_,_,_,_,_,_,_,_,_])
-  // 顶层
   rows.push([_,_,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,_,_])
-  rows.push([_,_,F,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,F,_,_])
-  rows.push([_,_,F,G,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,G,F,_,_])
-  // 主体楼层（重复）
+  rows.push([_,_,F,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,F,_,_])
+  rows.push([_,_,F,Gc,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,Gc,F,_,_])
   for (let floor = 0; floor < 5; floor++) {
-    rows.push([_,F,F,D,W,W,D,W,W,D,W,W,D,W,W,D,W,W,D,W,W,D,F,_])
-    rows.push([_,F,D,W,G,W,W,G,W,W,G,W,W,G,W,W,G,W,W,G,W,W,F,_])
-    rows.push([_,F,D,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,F,_])
-    rows.push([_,F,D,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,F,_])
+    rows.push([_,F,F,D,Wc,Wc,D,Wc,Wc,D,Wc,Wc,D,Wc,Wc,D,Wc,Wc,D,Wc,Wc,D,F,_])
+    rows.push([_,F,D,Wc,Gc,Wc,Wc,Gc,Wc,Wc,Gc,Wc,Wc,Gc,Wc,Wc,Gc,Wc,Wc,Gc,Wc,Wc,F,_])
+    rows.push([_,F,D,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,F,_])
+    rows.push([_,F,D,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,F,_])
   }
-  // 底部入口
   rows.push([_,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,_])
-  rows.push([_,F,D,D,D,D,D,D,G,G,G,G,G,G,G,G,D,D,D,D,D,D,F,_])
-  rows.push([_,F,D,D,D,D,D,D,G,G,G,G,G,G,G,G,D,D,D,D,D,D,F,_])
+  rows.push([_,F,D,D,D,D,D,D,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,D,D,D,D,D,D,F,_])
+  rows.push([_,F,D,D,D,D,D,D,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,D,D,D,D,D,D,F,_])
   rows.push([_,_,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,F,_,_])
   return rows
 })()
 
 /** 城中村握手楼 (20x28) - 宝安城中村 */
 export const VILLAGE_BUILDING: SpriteData = (() => {
-  const W = '#8B7355'  // 旧墙
-  const D = '#6B5335'  // 暗墙
-  const R = '#AA4422'  // 红砖
-  const G = '#AABB88'  // 旧玻璃
-  const T = '#CC8844'  // 瓦片
+  const Wc = '#8B7355', D = '#6B5335', Rc = '#AA4422', Gc = '#AABB88', T = '#CC8844'
   const rows: string[][] = []
-  // 屋顶
   rows.push([_,_,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,_,_])
   rows.push([_,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,_])
   rows.push([T,T,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,T,T])
-  // 楼层
   for (let floor = 0; floor < 5; floor++) {
-    const isEven = floor % 2 === 0
-    rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
-    rows.push([W,D,isEven?G:W,isEven?G:W,W,W,D,isEven?G:W,isEven?G:W,W,W,D,isEven?G:W,isEven?G:W,W,W,D,isEven?G:W,isEven?G:W,W])
-    rows.push([W,D,isEven?G:W,isEven?G:W,W,W,D,isEven?G:W,isEven?G:W,W,W,D,isEven?G:W,isEven?G:W,W,W,D,isEven?G:W,isEven?G:W,W])
-    rows.push([R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R])
+    const ie = floor % 2 === 0
+    rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
+    rows.push([Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc,Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc,Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc,Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc])
+    rows.push([Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc,Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc,Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc,Wc,D,ie?Gc:Wc,ie?Gc:Wc,Wc])
+    rows.push([Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc])
   }
-  // 底层
-  rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
-  rows.push([W,D,D,D,D,D,D,D,G,G,G,G,G,G,D,D,D,D,D,W])
-  rows.push([W,D,D,D,D,D,D,D,G,G,G,G,G,G,D,D,D,D,D,W])
-  rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
+  rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
+  rows.push([Wc,D,D,D,D,D,D,D,Gc,Gc,Gc,Gc,Gc,Gc,D,D,D,D,D,Wc])
+  rows.push([Wc,D,D,D,D,D,D,D,Gc,Gc,Gc,Gc,Gc,Gc,D,D,D,D,D,Wc])
+  rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
   return rows
 })()
 
 /** 购物中心 (28x24) - 东门老街 / 华强北 */
 export const MALL_BUILDING: SpriteData = (() => {
-  const W = '#CC9944'  // 金色外墙
-  const D = '#AA7722'  // 暗金
-  const R = '#DD4444'  // 红色招牌
-  const G = '#88CCFF'  // 玻璃
-  const L = '#FFEE88'  // 灯光
+  const Wc = '#CC9944', D = '#AA7722', Rc = '#DD4444', Gc = '#88CCFF', L = '#FFEE88'
   const rows: string[][] = []
-  // 顶部招牌
-  rows.push([_,_,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,_,_])
-  rows.push([_,R,R,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,R,R,_])
-  rows.push([_,R,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,R,_])
-  rows.push([_,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,_])
-  // 主体
+  rows.push([_,_,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,_,_])
+  rows.push([_,Rc,Rc,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,Rc,Rc,_])
+  rows.push([_,Rc,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,Rc,_])
+  rows.push([_,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,_])
   for (let floor = 0; floor < 4; floor++) {
-    rows.push([W,W,D,G,G,G,D,G,G,G,D,G,G,G,D,G,G,G,D,G,G,G,D,G,G,G,D,W])
-    rows.push([W,D,G,G,L,G,G,G,L,G,G,G,L,G,G,G,L,G,G,G,L,G,G,G,L,G,G,W])
-    rows.push([W,D,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,W])
-    rows.push([W,W,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,W,W])
+    rows.push([Wc,Wc,D,Gc,Gc,Gc,D,Gc,Gc,Gc,D,Gc,Gc,Gc,D,Gc,Gc,Gc,D,Gc,Gc,Gc,D,Gc,Gc,Gc,D,Wc])
+    rows.push([Wc,D,Gc,Gc,L,Gc,Gc,Gc,L,Gc,Gc,Gc,L,Gc,Gc,Gc,L,Gc,Gc,Gc,L,Gc,Gc,Gc,L,Gc,Gc,Wc])
+    rows.push([Wc,D,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Wc])
+    rows.push([Wc,Wc,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,Wc,Wc])
   }
-  // 底层入口
-  rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
-  rows.push([W,D,D,D,D,D,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,D,D,D,D,D,W])
-  rows.push([W,D,D,D,D,D,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,G,D,D,D,D,D,W])
-  rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
+  rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
+  rows.push([Wc,D,D,D,D,D,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,D,D,D,D,D,Wc])
+  rows.push([Wc,D,D,D,D,D,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,Gc,D,D,D,D,D,Wc])
+  rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
   return rows
 })()
 
 /** 公寓楼 (18x26) - 南山公寓 */
 export const APARTMENT: SpriteData = (() => {
-  const W = '#778899'  // 外墙
-  const D = '#556677'  // 暗面
-  const G = '#AACCEE'  // 窗户
-  const Y = '#FFDD88'  // 亮灯窗
-  const R = '#AA3333'  // 屋顶
+  const Wc = '#778899', D = '#556677', Gc = '#AACCEE', Y = '#FFDD88', Rc = '#AA3333'
   const rows: string[][] = []
-  rows.push([_,_,R,R,R,R,R,R,R,R,R,R,R,R,R,R,_,_])
-  rows.push([_,R,R,D,D,D,D,D,D,D,D,D,D,D,D,R,R,_])
+  rows.push([_,_,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,_,_])
+  rows.push([_,Rc,Rc,D,D,D,D,D,D,D,D,D,D,D,D,Rc,Rc,_])
   for (let floor = 0; floor < 6; floor++) {
-    const hasLight = Math.random() > 0.4
-    rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
-    rows.push([W,D,hasLight?Y:G,hasLight?Y:G,W,W,D,hasLight?Y:G,hasLight?Y:G,W,W,D,hasLight?Y:G,hasLight?Y:G,W,W,D,W])
-    rows.push([W,D,hasLight?Y:G,hasLight?Y:G,W,W,D,hasLight?Y:G,hasLight?Y:G,W,W,D,hasLight?Y:G,hasLight?Y:G,W,W,D,W])
-    rows.push([W,W,D,D,D,D,D,D,D,D,D,D,D,D,D,D,W,W])
+    const hl = Math.random() > 0.4
+    rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
+    rows.push([Wc,D,hl?Y:Gc,hl?Y:Gc,Wc,Wc,D,hl?Y:Gc,hl?Y:Gc,Wc,Wc,D,hl?Y:Gc,hl?Y:Gc,Wc,Wc,D,Wc])
+    rows.push([Wc,D,hl?Y:Gc,hl?Y:Gc,Wc,Wc,D,hl?Y:Gc,hl?Y:Gc,Wc,Wc,D,hl?Y:Gc,hl?Y:Gc,Wc,Wc,D,Wc])
+    rows.push([Wc,Wc,D,D,D,D,D,D,D,D,D,D,D,D,D,D,Wc,Wc])
   }
-  rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
-  rows.push([W,D,D,D,D,D,D,D,G,G,G,G,D,D,D,D,D,W])
-  rows.push([W,D,D,D,D,D,D,D,G,G,G,G,D,D,D,D,D,W])
-  rows.push([W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W])
+  rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
+  rows.push([Wc,D,D,D,D,D,D,D,Gc,Gc,Gc,Gc,D,D,D,D,D,Wc])
+  rows.push([Wc,D,D,D,D,D,D,D,Gc,Gc,Gc,Gc,D,D,D,D,D,Wc])
+  rows.push([Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc])
   return rows
 })()
 
@@ -173,28 +356,24 @@ export const STREET_LAMP: SpriteData = [
   [_,_,_,_,_,_,_,_],
 ]
 
-/** 便利店 (16x16) - 华强北 */
+/** 便利店 (16x16) */
 export const CONVENIENCE_STORE: SpriteData = (() => {
-  const W = '#DDDDDD'
-  const R = '#EE4444'
-  const G = '#88CCFF'
-  const Y = '#FFEE44'
-  const D = '#888888'
+  const Wc = '#DDDDDD', Rc = '#EE4444', Gc = '#88CCFF', Y = '#FFEE44', D = '#888888'
   return [
-    [_,R,R,R,R,R,R,R,R,R,R,R,R,R,R,_],
-    [R,R,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,R,R],
-    [R,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,R],
-    [R,R,R,R,R,R,R,R,R,R,R,R,R,R,R,R],
-    [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
-    [W,D,G,G,G,D,W,W,W,W,D,G,G,G,D,W],
-    [W,D,G,G,G,D,W,W,W,W,D,G,G,G,D,W],
-    [W,D,G,G,G,D,W,W,W,W,D,G,G,G,D,W],
-    [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
-    [W,D,G,G,G,D,W,W,W,W,D,G,G,G,D,W],
-    [W,D,G,G,G,D,W,W,W,W,D,G,G,G,D,W],
-    [W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W],
-    [W,W,W,W,W,W,G,G,G,G,W,W,W,W,W,W],
-    [W,W,W,W,W,W,G,G,G,G,W,W,W,W,W,W],
+    [_,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,_],
+    [Rc,Rc,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Rc,Rc],
+    [Rc,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Rc],
+    [Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc],
+    [Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc],
+    [Wc,D,Gc,Gc,Gc,D,Wc,Wc,Wc,Wc,D,Gc,Gc,Gc,D,Wc],
+    [Wc,D,Gc,Gc,Gc,D,Wc,Wc,Wc,Wc,D,Gc,Gc,Gc,D,Wc],
+    [Wc,D,Gc,Gc,Gc,D,Wc,Wc,Wc,Wc,D,Gc,Gc,Gc,D,Wc],
+    [Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc],
+    [Wc,D,Gc,Gc,Gc,D,Wc,Wc,Wc,Wc,D,Gc,Gc,Gc,D,Wc],
+    [Wc,D,Gc,Gc,Gc,D,Wc,Wc,Wc,Wc,D,Gc,Gc,Gc,D,Wc],
+    [Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc],
+    [Wc,Wc,Wc,Wc,Wc,Wc,Gc,Gc,Gc,Gc,Wc,Wc,Wc,Wc,Wc,Wc],
+    [Wc,Wc,Wc,Wc,Wc,Wc,Gc,Gc,Gc,Gc,Wc,Wc,Wc,Wc,Wc,Wc],
     [D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D],
     [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
   ]
@@ -202,152 +381,147 @@ export const CONVENIENCE_STORE: SpriteData = (() => {
 
 /** 地铁站入口 (20x12) */
 export const METRO_ENTRANCE: SpriteData = (() => {
-  const B = '#1144AA'
-  const L = '#2255CC'
-  const W = '#AABBDD'
-  const Y = '#FFDD00'
-  const D = '#0A2255'
+  const Bc = '#1144AA', L = '#2255CC', Wc = '#AABBDD', Y = '#FFDD00', D = '#0A2255'
   return [
-    [_,_,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,_,_],
-    [_,B,B,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,B,B,_],
-    [_,B,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,B,_],
-    [_,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,B,_],
-    [B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,B],
-    [B,L,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,L,B],
-    [B,L,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,W,L,B],
-    [B,L,W,W,D,D,D,D,D,D,D,D,D,D,D,D,W,W,L,B],
-    [B,L,W,W,D,D,D,D,D,D,D,D,D,D,D,D,W,W,L,B],
-    [B,B,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,B,B],
+    [_,_,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,_,_],
+    [_,Bc,Bc,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Bc,Bc,_],
+    [_,Bc,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Bc,_],
+    [_,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,Bc,_],
+    [Bc,Bc,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,Bc,Bc],
+    [Bc,L,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,L,Bc],
+    [Bc,L,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,L,Bc],
+    [Bc,L,Wc,Wc,D,D,D,D,D,D,D,D,D,D,D,D,Wc,Wc,L,Bc],
+    [Bc,L,Wc,Wc,D,D,D,D,D,D,D,D,D,D,D,D,Wc,Wc,L,Bc],
+    [Bc,Bc,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,L,Bc,Bc],
     [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
     [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
   ]
 })()
 
-// ── Scene Layout Config ──────────────────────────────────────────
-
+// ── Scene Object Config ───────────────────────────────────────────
 export interface SceneObject {
   sprite: SpriteData
-  col: number  // tile column
-  row: number  // tile row
-  zY?: number  // z-sort override
+  col: number
+  row: number
+  zY?: number
 }
 
 export interface SceneConfig {
   name: string
   cols: number
   rows: number
-  floorColor: string
-  floorPattern: 'solid' | 'grid' | 'checker'
+  tilemap: TileType[][]
   objects: SceneObject[]
-  ambientColor: string  // overall tint
-  lightColor: string    // accent light
+  ambientColor: string
+  lightColor: string
+  walkableRowStart: number  // bots walk from this row down
 }
 
 export const SCENE_CONFIGS: Record<string, SceneConfig> = {
   '宝安城中村': {
     name: '宝安城中村',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.concrete,
-    floorPattern: 'grid',
+    cols: 24, rows: 18,
+    tilemap: VILLAGE_MAP,
     ambientColor: '#FF9F43',
     lightColor: '#FFAA55',
+    walkableRowStart: 13,
     objects: [
-      { sprite: VILLAGE_BUILDING, col: 1, row: 0 },
-      { sprite: VILLAGE_BUILDING, col: 10, row: 0 },
-      { sprite: STREET_LAMP, col: 5, row: 8 },
-      { sprite: STREET_LAMP, col: 14, row: 8 },
-      { sprite: CONVENIENCE_STORE, col: 4, row: 9 },
+      { sprite: VILLAGE_BUILDING, col: 0, row: 0 },
+      { sprite: VILLAGE_BUILDING, col: 11, row: 0 },
+      { sprite: STREET_LAMP, col: 5, row: 12 },
+      { sprite: STREET_LAMP, col: 17, row: 12 },
+      { sprite: CONVENIENCE_STORE, col: 6, row: 13 },
     ],
   },
   '南山科技园': {
     name: '南山科技园',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.tile_white,
-    floorPattern: 'checker',
+    cols: 24, rows: 18,
+    tilemap: TECH_MAP,
     ambientColor: '#4D96FF',
     lightColor: '#88BBFF',
+    walkableRowStart: 10,
     objects: [
       { sprite: OFFICE_TOWER, col: 0, row: 0 },
-      { sprite: OFFICE_TOWER, col: 13, row: 0 },
-      { sprite: METRO_ENTRANCE, col: 5, row: 9 },
-      { sprite: STREET_LAMP, col: 8, row: 8 },
-      { sprite: STREET_LAMP, col: 11, row: 8 },
+      { sprite: OFFICE_TOWER, col: 14, row: 0 },
+      { sprite: METRO_ENTRANCE, col: 6, row: 12 },
+      { sprite: STREET_LAMP, col: 9, row: 11 },
+      { sprite: STREET_LAMP, col: 13, row: 11 },
     ],
   },
   '福田CBD': {
     name: '福田CBD',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.tile_dark,
-    floorPattern: 'checker',
+    cols: 24, rows: 18,
+    tilemap: CBD_MAP,
     ambientColor: '#C77DFF',
     lightColor: '#DD99FF',
+    walkableRowStart: 12,
     objects: [
       { sprite: OFFICE_TOWER, col: 0, row: 0 },
-      { sprite: OFFICE_TOWER, col: 7, row: 0 },
-      { sprite: OFFICE_TOWER, col: 14, row: 0 },
-      { sprite: METRO_ENTRANCE, col: 4, row: 10 },
-      { sprite: STREET_LAMP, col: 10, row: 8 },
+      { sprite: OFFICE_TOWER, col: 8, row: 0 },
+      { sprite: OFFICE_TOWER, col: 16, row: 0 },
+      { sprite: METRO_ENTRANCE, col: 4, row: 12 },
+      { sprite: STREET_LAMP, col: 12, row: 11 },
     ],
   },
   '华强北': {
     name: '华强北',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.road,
-    floorPattern: 'grid',
+    cols: 24, rows: 18,
+    tilemap: HUAQIANG_MAP,
     ambientColor: '#00F5FF',
     lightColor: '#44FFFF',
+    walkableRowStart: 13,
     objects: [
       { sprite: MALL_BUILDING, col: 0, row: 0 },
-      { sprite: MALL_BUILDING, col: 12, row: 0 },
-      { sprite: CONVENIENCE_STORE, col: 6, row: 9 },
-      { sprite: STREET_LAMP, col: 3, row: 8 },
-      { sprite: STREET_LAMP, col: 15, row: 8 },
+      { sprite: MALL_BUILDING, col: 14, row: 0 },
+      { sprite: CONVENIENCE_STORE, col: 7, row: 13 },
+      { sprite: STREET_LAMP, col: 4, row: 12 },
+      { sprite: STREET_LAMP, col: 18, row: 12 },
     ],
   },
   '东门老街': {
     name: '东门老街',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.wood,
-    floorPattern: 'grid',
+    cols: 24, rows: 18,
+    tilemap: DONGMEN_MAP,
     ambientColor: '#FF6B6B',
     lightColor: '#FF8888',
+    walkableRowStart: 13,
     objects: [
       { sprite: MALL_BUILDING, col: 1, row: 0 },
-      { sprite: VILLAGE_BUILDING, col: 13, row: 0 },
-      { sprite: CONVENIENCE_STORE, col: 3, row: 9 },
-      { sprite: STREET_LAMP, col: 8, row: 8 },
-      { sprite: STREET_LAMP, col: 16, row: 8 },
+      { sprite: VILLAGE_BUILDING, col: 15, row: 0 },
+      { sprite: CONVENIENCE_STORE, col: 4, row: 13 },
+      { sprite: STREET_LAMP, col: 9, row: 12 },
+      { sprite: STREET_LAMP, col: 19, row: 12 },
     ],
   },
   '南山公寓': {
     name: '南山公寓',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.concrete,
-    floorPattern: 'solid',
+    cols: 24, rows: 18,
+    tilemap: APARTMENT_MAP,
     ambientColor: '#6BCB77',
     lightColor: '#88DD88',
+    walkableRowStart: 12,
     objects: [
       { sprite: APARTMENT, col: 1, row: 0 },
-      { sprite: APARTMENT, col: 11, row: 0 },
-      { sprite: STREET_LAMP, col: 6, row: 8 },
-      { sprite: CONVENIENCE_STORE, col: 14, row: 9 },
+      { sprite: APARTMENT, col: 13, row: 0 },
+      { sprite: STREET_LAMP, col: 7, row: 11 },
+      { sprite: CONVENIENCE_STORE, col: 17, row: 12 },
     ],
   },
   '深圳湾公园': {
     name: '深圳湾公园',
-    cols: 20, rows: 16,
-    floorColor: FLOOR_COLORS.grass,
-    floorPattern: 'solid',
+    cols: 24, rows: 18,
+    tilemap: PARK_MAP,
     ambientColor: '#00F5FF',
     lightColor: '#44FFEE',
+    walkableRowStart: 7,
     objects: [
-      { sprite: PARK_TREE, col: 1, row: 2 },
-      { sprite: PARK_TREE, col: 5, row: 1 },
-      { sprite: PARK_TREE, col: 9, row: 3 },
-      { sprite: PARK_TREE, col: 14, row: 1 },
-      { sprite: PARK_TREE, col: 17, row: 2 },
-      { sprite: STREET_LAMP, col: 7, row: 9 },
-      { sprite: STREET_LAMP, col: 12, row: 9 },
+      { sprite: PARK_TREE, col: 1, row: 1 },
+      { sprite: PARK_TREE, col: 5, row: 2 },
+      { sprite: PARK_TREE, col: 10, row: 1 },
+      { sprite: PARK_TREE, col: 15, row: 2 },
+      { sprite: PARK_TREE, col: 19, row: 1 },
+      { sprite: STREET_LAMP, col: 8, row: 9 },
+      { sprite: STREET_LAMP, col: 14, row: 9 },
     ],
   },
 }
