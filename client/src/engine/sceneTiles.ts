@@ -336,6 +336,75 @@ export const PARK_TREE: SpriteData = [
   [_,_,_,_,_,_,_,_,_,_,_,_],
 ]
 
+/** 华强北电子大厦招牌 (32x10) */
+export const HUAQIANG_SIGN: SpriteData = (() => {
+  const Rc = '#EE1111', Y = '#FFEE00', Wc = '#FFFFFF', D = '#222222'
+  return [
+    [D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D],
+    [D,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,D],
+    [D,Rc,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Rc,D],
+    [D,Rc,Y,Wc,Wc,Y,Wc,Wc,Wc,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Wc,Wc,Wc,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Rc,D],
+    [D,Rc,Y,Wc,Wc,Y,Wc,Y,Wc,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Wc,Y,Y,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Rc,D],
+    [D,Rc,Y,Wc,Wc,Y,Wc,Wc,Wc,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Wc,Wc,Y,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Rc,D],
+    [D,Rc,Y,Wc,Wc,Y,Wc,Y,Y,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Wc,Y,Y,Y,Wc,Y,Wc,Y,Y,Wc,Y,Y,Rc,D],
+    [D,Rc,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Rc,D],
+    [D,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,D],
+    [D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D],
+  ]
+})()
+
+/** 深圳湾海滨栈道 (24x8) */
+export const BOARDWALK: SpriteData = (() => {
+  const W = '#8B6914', L = '#A07820', Rc = '#CC8833', Bl = '#1A3A6A', Wv = '#2A5A9A'
+  return [
+    [W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L],
+    [L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W],
+    [Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc],
+    [W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L],
+    [L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W,L,W],
+    [Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc],
+    [Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv,Bl,Wv],
+    [Bl,Bl,Wv,Bl,Bl,Wv,Bl,Bl,Wv,Bl,Bl,Wv,Bl,Bl,Wv,Bl,Bl,Wv,Bl,Bl,Wv,Bl,Bl,Wv],
+  ]
+})()
+
+/** 公园凉亭 (20x14) */
+export const PAVILION: SpriteData = (() => {
+  const Rc = '#CC4422', D = '#8B2200', Y = '#FFDD88', Gc = '#446644', Wc = '#CCAA66'
+  return [
+    [_,_,_,_,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,Rc,_,_,_,_],
+    [_,_,_,Rc,Rc,D,D,D,D,D,D,D,D,D,D,Rc,Rc,_,_,_],
+    [_,_,Rc,D,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,D,Rc,_,_],
+    [_,Rc,D,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,Y,D,Rc,_],
+    [Rc,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,Rc],
+    [Wc,Gc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Gc,Wc],
+    [Wc,Gc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Gc,Wc],
+    [Wc,Gc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Gc,Wc],
+    [Wc,Gc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Gc,Wc],
+    [Wc,Gc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Gc,Wc],
+    [Wc,Gc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Gc,Wc],
+    [Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc,Wc],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+    [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  ]
+})()
+
+/** 老街红灯笼 (6x12) */
+export const RED_LANTERN: SpriteData = [
+  [_,_,'#CC2200','#CC2200',_,_],
+  [_,'#CC2200','#FF4400','#FF4400','#CC2200',_],
+  ['#CC2200','#FF4400','#FF6600','#FF6600','#FF4400','#CC2200'],
+  ['#CC2200','#FF4400','#FF6600','#FF6600','#FF4400','#CC2200'],
+  ['#CC2200','#FF4400','#FF6600','#FF6600','#FF4400','#CC2200'],
+  ['#CC2200','#FF4400','#FF6600','#FF6600','#FF4400','#CC2200'],
+  ['#CC2200','#FF4400','#FF6600','#FF6600','#FF4400','#CC2200'],
+  [_,'#CC2200','#FF4400','#FF4400','#CC2200',_],
+  [_,_,'#AA1100','#AA1100',_,_],
+  [_,_,'#FFDD00','#FFDD00',_,_],
+  [_,_,'#FFDD00','#FFDD00',_,_],
+  [_,_,_,_,_,_],
+]
+
 /** 路灯 (8x16) */
 export const STREET_LAMP: SpriteData = [
   [_,_,_,'#888888','#888888',_,_,_],
@@ -473,6 +542,7 @@ export const SCENE_CONFIGS: Record<string, SceneConfig> = {
     objects: [
       { sprite: MALL_BUILDING, col: 0, row: 0 },
       { sprite: MALL_BUILDING, col: 14, row: 0 },
+      { sprite: HUAQIANG_SIGN, col: 0, row: 4 },
       { sprite: CONVENIENCE_STORE, col: 7, row: 13 },
       { sprite: STREET_LAMP, col: 4, row: 12 },
       { sprite: STREET_LAMP, col: 18, row: 12 },
@@ -488,6 +558,10 @@ export const SCENE_CONFIGS: Record<string, SceneConfig> = {
     objects: [
       { sprite: MALL_BUILDING, col: 1, row: 0 },
       { sprite: VILLAGE_BUILDING, col: 15, row: 0 },
+      { sprite: RED_LANTERN, col: 6, row: 4 },
+      { sprite: RED_LANTERN, col: 9, row: 4 },
+      { sprite: RED_LANTERN, col: 12, row: 4 },
+      { sprite: RED_LANTERN, col: 15, row: 4 },
       { sprite: CONVENIENCE_STORE, col: 4, row: 13 },
       { sprite: STREET_LAMP, col: 9, row: 12 },
       { sprite: STREET_LAMP, col: 19, row: 12 },
@@ -520,6 +594,8 @@ export const SCENE_CONFIGS: Record<string, SceneConfig> = {
       { sprite: PARK_TREE, col: 10, row: 1 },
       { sprite: PARK_TREE, col: 15, row: 2 },
       { sprite: PARK_TREE, col: 19, row: 1 },
+      { sprite: PAVILION, col: 3, row: 7 },
+      { sprite: BOARDWALK, col: 0, row: 10 },
       { sprite: STREET_LAMP, col: 8, row: 9 },
       { sprite: STREET_LAMP, col: 14, row: 9 },
     ],

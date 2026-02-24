@@ -34,6 +34,11 @@ interface BotRenderState {
   frameTimer: number
   paletteIndex: number
   wanderTimer: number
+  // Migration trail
+  prevLocation?: string
+  currentLocation?: string
+  trail?: { x: number; y: number; alpha: number }[]
+  trailTimer?: number
 }
 
 interface EmotionBubble {
@@ -287,16 +292,28 @@ export default function PixelCityMap({
           state: bot.is_sleeping ? 'sleep' : (isHere ? 'walk' : 'idle'),
           frame: 0, frameTimer: 0,
           paletteIndex: i % 10,
-          wanderTimer: Math.random() * WANDER_INTERVAL,  // stagger initial wander
+          wanderTimer: Math.random() * WANDER_INTERVAL,
+          currentLocation: bot.location,
+          trail: [{ x: sx, y: sy, alpha: 1.0 }],  // always track trail
+          trailTimer: 0,
         }
       } else {
         const bs = botStatesRef.current[botId]
+        // Detect location change -> spawn migration trail
+        if (bs.currentLocation && bs.currentLocation !== bot.location) {
+          // Record trail from current position
+          bs.prevLocation = bs.currentLocation
+          bs.trail = [{ x: bs.x, y: bs.y, alpha: 1.0 }]
+          bs.trailTimer = 0
+        }
+        bs.currentLocation = bot.location
         // Periodically give bots at current location new wander targets
         if (isHere && Math.abs(bs.x - bs.targetX) < 2 && Math.abs(bs.y - bs.targetY) < 2) {
-          const newCol = 2 + Math.floor(Math.random() * (scene.cols - 4))
-          const newRow = Math.floor(scene.rows * 0.55) + Math.floor(Math.random() * Math.floor(scene.rows * 0.4))
-          bs.targetX = newCol * TILE_SIZE + TILE_SIZE / 2
-          bs.targetY = newRow * TILE_SIZE + TILE_SIZE / 2
+          const wt2 = getRandomWalkableTile(scene.tilemap)
+          if (wt2) {
+            bs.targetX = wt2.col * TILE_SIZE + TILE_SIZE / 2
+            bs.targetY = wt2.row * TILE_SIZE + TILE_SIZE / 2
+          }
           bs.state = bot.is_sleeping ? 'sleep' : 'walk'
         } else if (!isHere) {
           bs.state = bot.is_sleeping ? 'sleep' : 'idle'
@@ -426,6 +443,43 @@ export default function PixelCityMap({
             bs.dir = dy > 0 ? 'down' : 'up'
           }
         }
+      }
+
+      // Update trail: always track walking bots, fade old points
+      if (!bs.trail) bs.trail = []
+      bs.trailTimer = (bs.trailTimer ?? 0) + dt
+      if (bs.state === 'walk' && bs.trailTimer > 0.12) {
+        bs.trailTimer = 0
+        bs.trail.push({ x: bs.x, y: bs.y, alpha: 1.0 })
+        if (bs.trail.length > 30) bs.trail.shift()
+      }
+      bs.trail.forEach(pt => { pt.alpha -= dt * 0.5 })
+      bs.trail = bs.trail.filter(pt => pt.alpha > 0.05)
+
+      // Draw migration trail (colored dashed line)
+      if (bs.trail && bs.trail.length > 1) {
+        const trailColor = BOT_COLORS[botId] || '#4d96ff'
+        drawables.push({
+          zY: -9999,
+          draw: (c) => {
+            c.save()
+            c.setLineDash([4, 4])
+            c.lineWidth = 2
+            for (let ti = 1; ti < bs.trail!.length; ti++) {
+              const pt0 = bs.trail![ti - 1]
+              const pt1 = bs.trail![ti]
+              const alpha = Math.min(pt0.alpha, pt1.alpha) * 0.7
+              c.strokeStyle = trailColor
+              c.globalAlpha = alpha
+              c.beginPath()
+              c.moveTo(offsetX + pt0.x * ZOOM, offsetY + pt0.y * ZOOM)
+              c.lineTo(offsetX + pt1.x * ZOOM, offsetY + pt1.y * ZOOM)
+              c.stroke()
+            }
+            c.setLineDash([])
+            c.restore()
+          }
+        })
       }
 
       const sprites = getCharacterSprites(bs.paletteIndex)
