@@ -1,63 +1,120 @@
 /**
  * PixelCityMap - 深圳像素城市场景视图
- * 使用设计图作为背景底图，角色精灵在上层行走
+ * 使用设计图作为背景底图，真实角色精灵图在上层行走
  *
- * 设计哲学：高质量像素艺术场景 + 活动角色叠加
+ * 设计哲学：高质量像素艺术场景 + 真实精灵图角色
  * - 每个场景用对应的设计图作为背景
- * - 角色在预定义的可步行区域内漫游
- * - 保留 Z排序、情绪气泡、选中高亮等交互
+ * - 角色使用 szpc_chars_sheet1/2.png 中的真实精灵
+ * - 可步行区域基于设计图视觉分析精确定义
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react'
 import type { WorldState } from '@/types/world'
 import { BOT_COLORS, getEmotionColor, getDominantEmotion } from '@/types/world'
-import {
-  getCachedSprite, getOutlineSprite, getCharacterSprites, getOccupationSprites, getFrameSprite,
-  type SpriteData, type Direction, type CharState
-} from '@/engine/spriteSystem'
 
-// ── Scene background images (CDN URLs) ─────────────────────────────────
+// ── Scene background images ─────────────────────────────────────────────
 const SCENE_IMAGES: Record<string, string> = {
-  '宝安城中村':  '/scenes/scene_chengzhongcun.jpg',
-  '南山科技园':  '/scenes/scene_techpark.jpg',
-  '福田CBD':     '/scenes/scene_techpark.jpg',
-  '华强北':      '/scenes/scene_huaqiangbei.jpg',
-  '东门老街':    '/scenes/scene_dongmen.jpg',
-  '南山公寓':    '/scenes/scene_apartments.jpg',
-  '深圳湾公园':  '/scenes/scene_baypark.jpg',
+  '宝安城中村':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/YvCkMHkYoJrfPzRK.jpg',
+  '南山科技园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/QndyhTwuFLKRbpQX.jpg',
+  '福田CBD':     'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/QndyhTwuFLKRbpQX.jpg',
+  '华强北':      'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/fuUjYdNszROpoznh.jpg',
+  '东门老街':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/MawmexshRXeTNzwm.jpg',
+  '南山公寓':    'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bBPZGZJDDPQTggJX.jpg',
+  '深圳湾公园':  'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/qMkeoTdcqlLTdfUU.jpg',
 }
 
-// ── Walkable zones per scene (normalized 0-1 relative to scene image) ─
-// Each zone is [x, y, w, h] - bots can walk anywhere within these zones
+// ── Spritesheet configuration ────────────────────────────────────────────
+// Sheet1 (szpc_chars_sheet1.png): 外卖骑手(0), 程序员(1), 城中村大叔(2), 华强北商人(3), 白领(4)
+// Sheet2 (szpc_chars_sheet2.png): 创业者(0), 深漂青年(1), 广场舞大妈(2), 保安(3), 跑步者(4)
+// Each sheet: 1376x768, 7 cols x 5 rows, cell = 196x153px
+// Cols 0-5: animation frames (0=idle, 1-5=walk), Col 6: portrait (skip)
+
+const SHEET_CELL_W = 196   // 1376 / 7
+const SHEET_CELL_H = 153   // 768 / 5
+const SHEET_COLS = 6       // usable animation frames per character
+
+interface SpriteConfig {
+  sheet: 1 | 2
+  row: number
+  frameCount: number   // number of walk frames (cols 1..frameCount)
+  scale: number        // render scale
+  offsetY: number      // vertical offset to align feet to anchor point (0-1 of cell height)
+}
+
+// Map occupation/role → spritesheet config
+const SPRITE_CONFIGS: Record<string, SpriteConfig> = {
+  '外卖骑手':   { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 },
+  '程序员':     { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '城中村大叔': { sheet: 1, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '华强北商人': { sheet: 1, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '白领':       { sheet: 1, row: 4, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '创业者':     { sheet: 2, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '深漂青年':   { sheet: 2, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '广场舞大妈': { sheet: 2, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '保安':       { sheet: 2, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 },
+  '跑步者':     { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 },
+}
+
+// Fallback sprite configs by index (for bots without occupation)
+const FALLBACK_CONFIGS: SpriteConfig[] = [
+  { sheet: 2, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 创业者
+  { sheet: 1, row: 4, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 白领
+  { sheet: 2, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 深漂青年
+  { sheet: 1, row: 1, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 程序员
+  { sheet: 2, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 保安
+  { sheet: 1, row: 3, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 华强北商人
+  { sheet: 2, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 广场舞大妈
+  { sheet: 1, row: 2, frameCount: 5, scale: 0.55, offsetY: 0.90 }, // 城中村大叔
+  { sheet: 2, row: 4, frameCount: 5, scale: 0.60, offsetY: 0.90 }, // 跑步者
+  { sheet: 1, row: 0, frameCount: 5, scale: 0.55, offsetY: 0.85 }, // 外卖骑手
+]
+
+// ── Walkable zones per scene (normalized 0-1 relative to scene image) ──
+// Based on visual analysis of design images
+// Each zone: [x, y, w, h] - characters walk within these rectangles
 const SCENE_WALK_ZONES: Record<string, [number, number, number, number][]> = {
   '宝安城中村': [
-    [0.05, 0.25, 0.90, 0.55],  // main alley area
-    [0.10, 0.70, 0.80, 0.25],  // lower area
+    // Dirt alleys between buildings (avoid rooftops and building footprints)
+    [0.15, 0.22, 0.70, 0.26],  // upper alley (between top buildings)
+    [0.12, 0.50, 0.30, 0.32],  // left-center alley
+    [0.55, 0.50, 0.32, 0.32],  // right-center alley
+    [0.68, 0.22, 0.20, 0.28],  // right shop fronts
   ],
   '南山科技园': [
-    [0.10, 0.35, 0.80, 0.35],  // central plaza
-    [0.05, 0.65, 0.90, 0.20],  // lower street
+    // Central paved plaza (avoid buildings top 35% and left 22%)
+    [0.22, 0.30, 0.56, 0.16],  // upper plaza near SILICON VALLEY
+    [0.10, 0.46, 0.80, 0.26],  // main central plaza
+    [0.15, 0.72, 0.70, 0.16],  // lower entrance area with coffee stalls
   ],
   '福田CBD': [
-    [0.15, 0.30, 0.70, 0.50],  // main plaza
-    [0.05, 0.75, 0.90, 0.20],  // street
+    [0.18, 0.38, 0.64, 0.32],  // main plaza
+    [0.05, 0.70, 0.90, 0.16],  // street level
   ],
   '华强北': [
-    [0.05, 0.25, 0.90, 0.60],  // crowded street
-    [0.10, 0.80, 0.80, 0.15],  // lower area
+    // Dense pedestrian street - almost entire scene is walkable
+    [0.03, 0.18, 0.44, 0.65],  // left half crowd area
+    [0.52, 0.18, 0.44, 0.65],  // right half crowd area
+    [0.08, 0.80, 0.84, 0.14],  // bottom storefronts
   ],
   '东门老街': [
-    [0.10, 0.20, 0.80, 0.65],  // pedestrian street
-    [0.05, 0.80, 0.90, 0.15],  // lower shops
+    // Stone-paved plaza (avoid shop buildings on edges and two trees)
+    [0.12, 0.20, 0.76, 0.22],  // upper plaza (in front of shops)
+    [0.12, 0.38, 0.20, 0.36],  // left of trees
+    [0.42, 0.38, 0.46, 0.36],  // right of trees
+    [0.12, 0.72, 0.76, 0.18],  // lower plaza
   ],
   '南山公寓': [
-    [0.05, 0.30, 0.90, 0.40],  // courtyard
-    [0.10, 0.65, 0.80, 0.25],  // lower area
+    // Courtyards and parking areas between apartment blocks
+    [0.22, 0.40, 0.56, 0.20],  // central road between buildings
+    [0.60, 0.52, 0.28, 0.26],  // right courtyard
+    [0.08, 0.70, 0.84, 0.14],  // lower road
   ],
   '深圳湾公园': [
-    [0.05, 0.10, 0.55, 0.35],  // park grass
-    [0.05, 0.40, 0.90, 0.25],  // promenade
-    [0.40, 0.10, 0.55, 0.35],  // right park
+    // Grass areas and promenade ONLY (avoid water below y=0.52)
+    [0.02, 0.02, 0.40, 0.24],  // left grass (tai chi area)
+    [0.44, 0.28, 0.54, 0.20],  // right grass area
+    [0.02, 0.28, 0.88, 0.10],  // bike road
+    [0.02, 0.40, 0.60, 0.12],  // wooden promenade (not water)
   ],
 }
 
@@ -75,13 +132,15 @@ const SCENE_META: Record<string, { ambientColor: string; name: string }> = {
 const SCENE_NAMES = Object.keys(SCENE_META)
 
 // ── Character constants ───────────────────────────────────────────────
-const CHAR_ZOOM = 3.5
-const CHAR_WALK_SPEED = 1.2   // pixels per frame
-const WALK_FRAME_DURATION = 0.14
-const WANDER_INTERVAL = 4.0
+const CHAR_WALK_SPEED = 0.8   // pixels per frame (normalized)
+const WALK_FRAME_DURATION = 0.12  // seconds per animation frame
+const WANDER_INTERVAL = 3.5
+
+type Direction = 'left' | 'right' | 'down' | 'up'
+type CharState = 'idle' | 'walk' | 'sleep'
 
 interface BotRenderState {
-  x: number; y: number        // normalized 0-1 position within scene
+  x: number; y: number
   targetX: number; targetY: number
   dir: Direction
   state: CharState
@@ -111,27 +170,6 @@ interface Props {
   currentLocation?: string
 }
 
-// ── Emotion Bubble Sprite ─────────────────────────────────────────────
-const _ = ''
-function createEmotionBubble(): SpriteData {
-  const B = '#555566', F = '#EEEEFF'
-  return [
-    [B,B,B,B,B,B,B,B,B,B,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,F,F,F,F,F,F,F,F,F,B],
-    [B,B,B,B,B,B,B,B,B,B,B],
-    [_,_,_,_,B,B,B,_,_,_,_],
-    [_,_,_,_,_,B,_,_,_,_,_],
-    [_,_,_,_,_,_,_,_,_,_,_],
-  ]
-}
-const BUBBLE_SPRITE = createEmotionBubble()
-
 // ── Image cache ───────────────────────────────────────────────────────
 const imageCache: Record<string, HTMLImageElement | null> = {}
 const imageLoaded: Record<string, boolean> = {}
@@ -141,6 +179,7 @@ function preloadImage(url: string): HTMLImageElement {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => { imageLoaded[url] = true }
+    img.onerror = () => { imageLoaded[url] = false }
     img.src = url
     imageCache[url] = img
     imageLoaded[url] = false
@@ -168,6 +207,77 @@ function getInitialWalkPoint(location: string, index: number, total: number): { 
   }
 }
 
+// ── Get sprite config for a bot ───────────────────────────────────────
+function getSpriteConfig(occupation: string | undefined, paletteIndex: number): SpriteConfig {
+  if (occupation && SPRITE_CONFIGS[occupation]) {
+    return SPRITE_CONFIGS[occupation]
+  }
+  return FALLBACK_CONFIGS[paletteIndex % FALLBACK_CONFIGS.length]
+}
+
+// ── Draw character from spritesheet ──────────────────────────────────
+function drawCharFromSheet(
+  ctx: CanvasRenderingContext2D,
+  config: SpriteConfig,
+  frame: number,
+  dir: Direction,
+  cx: number,  // center x in canvas pixels
+  cy: number,  // anchor y (feet position) in canvas pixels
+  isFlipped: boolean,
+  alpha: number = 1,
+) {
+          const sheetUrl2 = config.sheet === 1
+            ? 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png'
+            : 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png'
+          const sheet = imageCache[sheetUrl2]
+          if (!sheet || !imageLoaded[sheetUrl2]) return
+
+  // Clamp frame to valid range
+  const walkFrame = Math.min(frame, config.frameCount - 1)
+  const col = frame === 0 ? 0 : (walkFrame % config.frameCount) + 1  // col 0 = idle, 1-5 = walk
+  const actualCol = Math.min(col, SHEET_COLS - 1)
+
+  const sx = actualCol * SHEET_CELL_W
+  const sy = config.row * SHEET_CELL_H
+
+  const renderW = Math.round(SHEET_CELL_W * config.scale)
+  const renderH = Math.round(SHEET_CELL_H * config.scale)
+
+  // Anchor: feet at cy, horizontally centered at cx
+  const dx = cx - renderW / 2
+  const dy = cy - renderH * config.offsetY
+
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.imageSmoothingEnabled = false
+
+  if (isFlipped) {
+    // Flip horizontally: translate to center, scale -1, then draw at negative offset
+    ctx.translate(cx, 0)
+    ctx.scale(-1, 1)
+    ctx.drawImage(
+      sheet,
+      sx, sy, SHEET_CELL_W, SHEET_CELL_H,
+      -renderW / 2,
+      dy,
+      renderW, renderH
+    )
+  } else {
+    ctx.drawImage(
+      sheet,
+      sx, sy, SHEET_CELL_W, SHEET_CELL_H,
+      dx,
+      dy,
+      renderW, renderH
+    )
+  }
+
+  ctx.restore()
+}
+
+// Placeholder for canvas width (will be replaced in render)
+let canvas_w_placeholder = 800
+
 export default function PixelCityMap({
   world, selectedBotId, onBotClick, onLocationClick, currentLocation
 }: Props) {
@@ -188,9 +298,11 @@ export default function PixelCityMap({
   const activeLocation = currentLocation || SCENE_NAMES[0]
   const meta = SCENE_META[activeLocation] || SCENE_META['南山科技园']
 
-  // Preload all scene images
+  // Preload all images
   useEffect(() => {
     Object.values(SCENE_IMAGES).forEach(url => preloadImage(url))
+    preloadImage('https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png')
+    preloadImage('https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png')
   }, [])
 
   // Update bot states when world changes
@@ -237,7 +349,7 @@ export default function PixelCityMap({
       }
 
       // Spawn emotion bubble
-      if (Math.random() < 0.008) {
+      if (Math.random() < 0.006) {
         const emotion = getDominantEmotion(bot.emotions)
         const bs = botStatesRef.current[botId]
         if (bs) {
@@ -249,7 +361,6 @@ export default function PixelCityMap({
       }
     })
 
-    // Remove dead bots
     Object.keys(botStatesRef.current).forEach(id => {
       if (!allBotIds.includes(id)) delete botStatesRef.current[id]
     })
@@ -270,6 +381,7 @@ export default function PixelCityMap({
     const dpr = window.devicePixelRatio || 1
     const cssW = canvas.width / dpr
     const cssH = canvas.height / dpr
+    canvas_w_placeholder = cssW
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.save()
@@ -285,8 +397,8 @@ export default function PixelCityMap({
     let imgDrawX = 0, imgDrawY = 0, imgDrawW = cssW, imgDrawH = cssH
 
     if (bgImg && imageLoaded[bgUrl!]) {
-      ctx.imageSmoothingEnabled = false
-      // Cover: scale to fill canvas, centered
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
       const imgAspect = bgImg.width / bgImg.height
       const canvasAspect = cssW / cssH
       if (canvasAspect > imgAspect) {
@@ -302,7 +414,6 @@ export default function PixelCityMap({
       }
       ctx.drawImage(bgImg, imgDrawX, imgDrawY, imgDrawW, imgDrawH)
     } else {
-      // Fallback: dark background with location name
       ctx.fillStyle = meta.ambientColor + '22'
       ctx.fillRect(0, 0, cssW, cssH)
       ctx.fillStyle = meta.ambientColor + '44'
@@ -335,7 +446,7 @@ export default function PixelCityMap({
       if (bs.state === 'walk') {
         if (bs.frameTimer >= WALK_FRAME_DURATION) {
           bs.frameTimer -= WALK_FRAME_DURATION
-          bs.frame = (bs.frame + 1) % 4
+          bs.frame = (bs.frame + 1) % 5
         }
         const dx = bs.targetX - bs.x
         const dy = bs.targetY - bs.y
@@ -344,7 +455,7 @@ export default function PixelCityMap({
           bs.x = bs.targetX; bs.y = bs.targetY
           bs.state = 'idle'; bs.frame = 0; bs.wanderTimer = 0
         } else {
-          const speed = CHAR_WALK_SPEED / cssW  // normalize speed to canvas width
+          const speed = CHAR_WALK_SPEED / cssW
           bs.x += (dx / dist) * speed
           bs.y += (dy / dist) * speed
           if (Math.abs(dx) > Math.abs(dy)) {
@@ -361,9 +472,9 @@ export default function PixelCityMap({
       if (bs.state === 'walk' && bs.trailTimer > 0.15) {
         bs.trailTimer = 0
         bs.trail.push({ x: bs.x, y: bs.y, alpha: 1.0 })
-        if (bs.trail.length > 20) bs.trail.shift()
+        if (bs.trail.length > 15) bs.trail.shift()
       }
-      bs.trail.forEach(pt => { pt.alpha -= dt * 0.6 })
+      bs.trail.forEach(pt => { pt.alpha -= dt * 0.8 })
       bs.trail = bs.trail.filter(pt => pt.alpha > 0.05)
 
       // Draw trail
@@ -378,7 +489,7 @@ export default function PixelCityMap({
             for (let ti = 1; ti < bs.trail!.length; ti++) {
               const pt0 = bs.trail![ti - 1]
               const pt1 = bs.trail![ti]
-              const alpha = Math.min(pt0.alpha, pt1.alpha) * 0.5
+              const alpha = Math.min(pt0.alpha, pt1.alpha) * 0.4
               c.strokeStyle = trailColor
               c.globalAlpha = alpha
               c.beginPath()
@@ -392,35 +503,33 @@ export default function PixelCityMap({
         })
       }
 
-      // Character sprite
-      const sprites = bs.occupation ? getOccupationSprites(bs.occupation) : getCharacterSprites(bs.paletteIndex)
-      const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
-      const cached = getCachedSprite(spriteData, CHAR_ZOOM)
+      // Get sprite config
+      const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
+      const renderW = Math.round(SHEET_CELL_W * config.scale)
+      const renderH = Math.round(SHEET_CELL_H * config.scale)
 
       // Convert normalized position to canvas pixels
+      // cx = horizontal center, cy = feet anchor point
       const cx = imgDrawX + bs.x * imgDrawW
       const cy = imgDrawY + bs.y * imgDrawH
-      const px = Math.round(cx - cached.width / 2)
-      const py = Math.round(cy - cached.height)
       const zY = cy
 
       const isSelected = selectedBotId === botId
       const isHovered = hoveredBotId === botId
+      const isFlipped = bs.dir === 'left'
 
-      // Outline for selected/hovered
-      if (isSelected || isHovered) {
-        const outlineData = getOutlineSprite(spriteData)
-        const outlineCached = getCachedSprite(outlineData, CHAR_ZOOM)
-        drawables.push({
-          zY: zY - 0.1,
-          draw: (c) => {
-            c.save()
-            c.globalAlpha = isSelected ? 0.9 : 0.5
-            c.drawImage(outlineCached, px - CHAR_ZOOM, py - CHAR_ZOOM)
-            c.restore()
-          }
-        })
-      }
+      // Shadow
+      drawables.push({
+        zY: zY - 0.3,
+        draw: (c) => {
+          c.save()
+          c.beginPath()
+          c.ellipse(cx, cy + 2, renderW * 0.35, renderW * 0.12, 0, 0, Math.PI * 2)
+          c.fillStyle = 'rgba(0,0,0,0.35)'
+          c.fill()
+          c.restore()
+        }
+      })
 
       // Selection ring
       if (isSelected) {
@@ -430,9 +539,9 @@ export default function PixelCityMap({
           draw: (c) => {
             c.save()
             c.beginPath()
-            c.ellipse(cx, cy + 2, 18, 6, 0, 0, Math.PI * 2)
+            c.ellipse(cx, cy + 2, renderW * 0.45, renderW * 0.15, 0, 0, Math.PI * 2)
             c.strokeStyle = color
-            c.lineWidth = 2
+            c.lineWidth = 2.5
             c.globalAlpha = 0.7 + pulse * 0.3
             c.stroke()
             c.restore()
@@ -440,37 +549,114 @@ export default function PixelCityMap({
         })
       }
 
-      // Shadow (scaled to CHAR_ZOOM)
+      // Hover highlight
+      if (isHovered && !isSelected) {
+        drawables.push({
+          zY: zY - 0.15,
+          draw: (c) => {
+            c.save()
+            c.beginPath()
+            c.ellipse(cx, cy + 2, renderW * 0.4, renderW * 0.13, 0, 0, Math.PI * 2)
+            c.strokeStyle = 'rgba(255,255,255,0.6)'
+            c.lineWidth = 1.5
+            c.stroke()
+            c.restore()
+          }
+        })
+      }
+
+      // Character sprite from spritesheet
+      const walkFrame = bs.state === 'idle' ? 0 : (bs.frame % 5) + 1
       drawables.push({
-        zY: zY - 0.3,
+        zY,
         draw: (c) => {
+          const sheetUrl = config.sheet === 1
+            ? 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/RrSdJdSxhCsEfKnc.png'
+            : 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663220928499/bOyMUWIKYLqLPQIT.png'
+          const sheet = imageCache[sheetUrl]
+          if (!sheet || !imageLoaded[sheetUrl]) {
+            // Fallback: colored circle
+            c.save()
+            c.beginPath()
+            c.arc(cx, cy - renderH * 0.5, renderW * 0.3, 0, Math.PI * 2)
+            c.fillStyle = BOT_COLORS[botId] || '#4d96ff'
+            c.fill()
+            c.restore()
+            return
+          }
+
+          const col = Math.min(walkFrame, SHEET_COLS - 1)
+          const sx = col * SHEET_CELL_W
+          const sy = config.row * SHEET_CELL_H
+          const dx = cx - renderW / 2
+          const dy = cy - renderH * config.offsetY
+
           c.save()
-          c.beginPath()
-          c.ellipse(cx, cy + 2, cached.width * 0.4, cached.width * 0.15, 0, 0, Math.PI * 2)
-          c.fillStyle = 'rgba(0,0,0,0.3)'
-          c.fill()
+          c.globalAlpha = isSelected ? 1.0 : (isHovered ? 0.95 : 0.92)
+          c.imageSmoothingEnabled = false
+
+          if (isFlipped) {
+            c.translate(cx, 0)
+            c.scale(-1, 1)
+            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
+              -renderW / 2, dy, renderW, renderH)
+          } else {
+            c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
+              dx, dy, renderW, renderH)
+          }
+
+          // Selected: bright outline effect
+          if (isSelected) {
+            c.globalAlpha = 0.4
+            c.globalCompositeOperation = 'screen'
+            if (isFlipped) {
+              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
+                -renderW / 2, dy, renderW, renderH)
+            } else {
+              c.drawImage(sheet, sx, sy, SHEET_CELL_W, SHEET_CELL_H,
+                dx, dy, renderW, renderH)
+            }
+            c.globalCompositeOperation = 'source-over'
+          }
+
           c.restore()
         }
       })
 
-      // Character
-      drawables.push({ zY, draw: (c) => c.drawImage(cached, px, py) })
-
       // Name label
       const botColor = BOT_COLORS[botId] || '#4d96ff'
-      const botName = world?.bots[botId]?.name?.slice(0, 3) ?? botId
+      const botName = world?.bots[botId]?.name?.slice(0, 4) ?? botId
+      const labelY = cy - renderH * config.offsetY - 6
       drawables.push({
         zY: zY + 1,
         draw: (c) => {
           c.save()
-          c.font = `bold 11px 'Noto Sans SC', monospace`
+          c.font = `bold 10px 'Noto Sans SC', monospace`
           c.textAlign = 'center'
           const lw = c.measureText(botName).width
-          c.fillStyle = 'rgba(0,0,0,0.7)'
-          c.fillRect(cx - lw / 2 - 3, cy - cached.height - 14, lw + 6, 13)
+          // Label background
+          c.fillStyle = 'rgba(0,0,0,0.75)'
+          c.beginPath()
+          const lx = cx - lw / 2 - 4
+          const ly = labelY - 11
+          const lrw = lw + 8
+          const lrh = 13
+          const r = 3
+          c.moveTo(lx + r, ly)
+          c.lineTo(lx + lrw - r, ly)
+          c.arcTo(lx + lrw, ly, lx + lrw, ly + r, r)
+          c.lineTo(lx + lrw, ly + lrh - r)
+          c.arcTo(lx + lrw, ly + lrh, lx + lrw - r, ly + lrh, r)
+          c.lineTo(lx + r, ly + lrh)
+          c.arcTo(lx, ly + lrh, lx, ly + lrh - r, r)
+          c.lineTo(lx, ly + r)
+          c.arcTo(lx, ly, lx + r, ly, r)
+          c.closePath()
+          c.fill()
+          // Label text
           c.fillStyle = botColor
           c.globalAlpha = 0.95
-          c.fillText(botName, cx, cy - cached.height - 4)
+          c.fillText(botName, cx, labelY)
           c.restore()
         }
       })
@@ -485,19 +671,32 @@ export default function PixelCityMap({
 
       const bs = botStatesRef.current[bubble.botId]
       if (!bs) return
-      const bx = imgDrawX + bs.x * imgDrawW - 16
-      const by = imgDrawY + bs.y * imgDrawH - 60
+      const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
+      const renderH = Math.round(SHEET_CELL_H * config.scale)
+      const bx = imgDrawX + bs.x * imgDrawW
+      const by = imgDrawY + bs.y * imgDrawH - renderH * config.offsetY - 30
 
-      const bubbleCached = getCachedSprite(BUBBLE_SPRITE, 2.5)
       drawables.push({
-        zY: imgDrawY + bs.y * imgDrawH - 100,
+        zY: imgDrawY + bs.y * imgDrawH - 200,
         draw: (c) => {
           c.save()
           c.globalAlpha = bubble.alpha
-          c.drawImage(bubbleCached, bx, by)
-          c.font = `12px sans-serif`
+          // Bubble background
+          c.fillStyle = 'rgba(30,30,40,0.85)'
+          c.beginPath()
+          c.roundRect(bx - 14, by - 14, 28, 24, 6)
+          c.fill()
+          // Bubble tail
+          c.beginPath()
+          c.moveTo(bx - 4, by + 10)
+          c.lineTo(bx + 4, by + 10)
+          c.lineTo(bx, by + 16)
+          c.closePath()
+          c.fill()
+          // Emoji
+          c.font = `14px sans-serif`
           c.textAlign = 'center'
-          c.fillText(bubble.emoji, bx + bubbleCached.width / 2, by + bubbleCached.height * 0.65)
+          c.fillText(bubble.emoji, bx, by + 4)
           c.restore()
         }
       })
@@ -510,7 +709,7 @@ export default function PixelCityMap({
     // ── Subtle vignette ───────────────────────────────────────────
     const vignette = ctx.createRadialGradient(cssW/2, cssH/2, cssH*0.3, cssW/2, cssH/2, cssH*0.8)
     vignette.addColorStop(0, 'transparent')
-    vignette.addColorStop(1, 'rgba(0,0,0,0.25)')
+    vignette.addColorStop(1, 'rgba(0,0,0,0.2)')
     ctx.fillStyle = vignette
     ctx.fillRect(0, 0, cssW, cssH)
 
@@ -573,14 +772,14 @@ export default function PixelCityMap({
     }
 
     for (const [botId, bs] of Object.entries(botStatesRef.current)) {
+      const config = getSpriteConfig(bs.occupation, bs.paletteIndex)
+      const renderW = Math.round(SHEET_CELL_W * config.scale)
+      const renderH = Math.round(SHEET_CELL_H * config.scale)
       const cx = imgDrawX + bs.x * imgDrawW
       const cy = imgDrawY + bs.y * imgDrawH
-      const sprites = bs.occupation ? getOccupationSprites(bs.occupation) : getCharacterSprites(bs.paletteIndex)
-      const spriteData = getFrameSprite(sprites, bs.state, bs.dir, bs.frame)
-      const cached = getCachedSprite(spriteData, CHAR_ZOOM)
-      const bx = cx - cached.width / 2
-      const by = cy - cached.height
-      if (mx >= bx && mx <= bx + cached.width && my >= by && my <= by + cached.height) {
+      const bx = cx - renderW / 2
+      const by = cy - renderH * config.offsetY
+      if (mx >= bx && mx <= bx + renderW && my >= by && my <= by + renderH) {
         return botId
       }
     }
