@@ -256,6 +256,11 @@ export default function PixelCityMap({
   const lastTimeRef = useRef<number>(0)
   const pulseRef = useRef(0)
   const [hoveredBotId, setHoveredBotId] = useState<string | null>(null)
+  // Drag-to-pan state
+  const panOffsetRef = useRef({ x: 0, y: 0 })
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+  const didDragRef = useRef(false)
 
   // Active scene
   const activeLocation = currentLocation || Object.keys(SCENE_CONFIGS)[0]
@@ -370,12 +375,13 @@ export default function PixelCityMap({
     ctx.fillStyle = '#060b14'
     ctx.fillRect(0, 0, cssW, cssH)
 
-    // ── Scene offset: align top, center horizontally ─────────────
+    // ── Scene offset: center + pan offset ─────────────────────────
     const sceneW = scene.cols * TILE_SIZE * ZOOM
     const sceneH = scene.rows * TILE_SIZE * ZOOM
-    const offsetX = Math.floor((cssW - sceneW) / 2)
-    // Start from top so buildings are visible; if scene is shorter than canvas, center vertically
-    const offsetY = sceneH < cssH ? Math.floor((cssH - sceneH) / 2) : 0
+    const baseCenterX = Math.floor((cssW - sceneW) / 2)
+    const baseCenterY = sceneH < cssH ? Math.floor((cssH - sceneH) / 2) : 0
+    const offsetX = baseCenterX + panOffsetRef.current.x
+    const offsetY = baseCenterY + panOffsetRef.current.y
 
     // ── Tilemap (pixel-agents renderTileGrid style) ────────────
     drawTilemap(ctx, scene.tilemap, offsetX, offsetY, ZOOM, timestamp / 1000)
@@ -669,8 +675,10 @@ export default function PixelCityMap({
     const cssH = canvas.height / dpr
     const sceneW = scene.cols * TILE_SIZE * ZOOM
     const sceneH = scene.rows * TILE_SIZE * ZOOM
-    const offsetX = (cssW - sceneW) / 2
-    const offsetY = (cssH - sceneH) / 2
+    const baseCenterX = (cssW - sceneW) / 2
+    const baseCenterY = sceneH < cssH ? (cssH - sceneH) / 2 : 0
+    const offsetX = baseCenterX + panOffsetRef.current.x
+    const offsetY = baseCenterY + panOffsetRef.current.y
 
     for (const [botId, bs] of Object.entries(botStatesRef.current)) {
       const cx = offsetX + bs.x * ZOOM
@@ -687,26 +695,72 @@ export default function PixelCityMap({
     return null
   }, [scene.cols, scene.rows])
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getCanvasPos = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) return { mx: 0, my: 0 }
     const rect = canvas.getBoundingClientRect()
     const dpr = window.devicePixelRatio || 1
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr
-    const my = (e.clientY - rect.top) * (canvas.height / rect.height) / dpr
-    const botId = getBotAtPoint(mx, my)
-    if (botId) onBotClick(botId)
-  }, [getBotAtPoint, onBotClick])
+    return {
+      mx: (clientX - rect.left) * (canvas.width / rect.width) / dpr,
+      my: (clientY - rect.top) * (canvas.height / rect.height) / dpr,
+    }
+  }, [])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDraggingRef.current = true
+    didDragRef.current = false
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: panOffsetRef.current.x,
+      panY: panOffsetRef.current.y,
+    }
+  }, [])
+
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    isDraggingRef.current = false
+    // Only fire click if we didn't drag
+    if (!didDragRef.current) {
+      const { mx, my } = getCanvasPos(e.clientX, e.clientY)
+      const botId = getBotAtPoint(mx, my)
+      if (botId) onBotClick(botId)
+    }
+    didDragRef.current = false
+  }, [getBotAtPoint, onBotClick, getCanvasPos])
+
+  const handleClick = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
+    // handled by mouseup
+  }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const dpr = window.devicePixelRatio || 1
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / dpr
-    const my = (e.clientY - rect.top) * (canvas.height / rect.height) / dpr
+    if (isDraggingRef.current) {
+      const dx = e.clientX - dragStartRef.current.x
+      const dy = e.clientY - dragStartRef.current.y
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDragRef.current = true
+      // Clamp pan so map doesn't go completely off screen
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const dpr = window.devicePixelRatio || 1
+      const cssW = canvas.width / dpr
+      const cssH = canvas.height / dpr
+      const sceneW = scene.cols * TILE_SIZE * ZOOM
+      const sceneH = scene.rows * TILE_SIZE * ZOOM
+      const maxPanX = sceneW * 0.5
+      const maxPanY = sceneH * 0.5
+      panOffsetRef.current = {
+        x: Math.max(-maxPanX, Math.min(maxPanX, dragStartRef.current.panX + dx)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, dragStartRef.current.panY + dy)),
+      }
+      return
+    }
+    const { mx, my } = getCanvasPos(e.clientX, e.clientY)
     setHoveredBotId(getBotAtPoint(mx, my))
-  }, [getBotAtPoint])
+  }, [getBotAtPoint, getCanvasPos, scene.cols, scene.rows])
+
+  // Reset pan when location changes
+  useEffect(() => {
+    panOffsetRef.current = { x: 0, y: 0 }
+  }, [activeLocation])
 
   return (
     <div className="relative w-full h-full">
@@ -714,12 +768,15 @@ export default function PixelCityMap({
         ref={canvasRef}
         className="w-full h-full"
         style={{
-          cursor: hoveredBotId ? 'pointer' : 'default',
+          cursor: isDraggingRef.current ? 'grabbing' : hoveredBotId ? 'pointer' : 'grab',
           imageRendering: 'pixelated',
+          userSelect: 'none',
         }}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
         onClick={handleClick}
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoveredBotId(null)}
+        onMouseLeave={() => { setHoveredBotId(null); isDraggingRef.current = false }}
       />
       {/* Location selector tabs */}
       <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 flex-wrap justify-center max-w-full px-2">

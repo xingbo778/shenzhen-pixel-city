@@ -6,7 +6,7 @@
  *       点击 Bot 卡片时右侧切换为 Bot 详情
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect, memo, useMemo } from "react";
 import { useWorldData, sendMessage, setEngineUrl } from "@/hooks/useWorldData";
 import PixelCityMap from "@/components/PixelCityMap";
 import BotCard from "@/components/BotCard";
@@ -50,11 +50,35 @@ export default function Home() {
     }
   }, [world]);
 
-  const aliveBots = world
-    ? Object.entries(world.bots).filter(([, b]) => b.status === "alive")
-    : [];
+  const aliveBots = useMemo(() =>
+    world
+      ? Object.entries(world.bots).filter(([, b]) => b.status === "alive")
+      : [],
+    [world]
+  );
 
   const selectedBot = selectedBotId && world ? world.bots[selectedBotId] : null;
+
+  // Lazy-load Bot cards: only render visible ones via IntersectionObserver
+  const [visibleBotIds, setVisibleBotIds] = useState<Set<string>>(new Set());
+  const botCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      (entries) => {
+        setVisibleBotIds(prev => {
+          const next = new Set(prev);
+          entries.forEach(e => {
+            const id = (e.target as HTMLElement).dataset.botid;
+            if (id) { if (e.isIntersecting) next.add(id); }
+          });
+          return next;
+        });
+      },
+      { threshold: 0.01 }
+    );
+    Object.entries(botCardRefs.current).forEach(([, el]) => { if (el) obs.observe(el); });
+    return () => obs.disconnect();
+  }, [aliveBots]);
 
   return (
     <div
@@ -157,13 +181,26 @@ export default function Home() {
             </div>
             <div className="p-2 grid grid-cols-2 gap-1.5">
               {aliveBots.map(([botId, bot]) => (
-                <BotCard
+                <div
                   key={botId}
-                  botId={botId}
-                  bot={bot}
-                  isSelected={selectedBotId === botId}
-                  onClick={() => handleBotClick(botId)}
-                />
+                  data-botid={botId}
+                  ref={el => { botCardRefs.current[botId] = el; }}
+                  style={{ minHeight: 80 }}
+                >
+                  {(visibleBotIds.has(botId) || selectedBotId === botId) ? (
+                    <BotCard
+                      botId={botId}
+                      bot={bot}
+                      isSelected={selectedBotId === botId}
+                      onClick={() => handleBotClick(botId)}
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full rounded"
+                      style={{ background: 'rgba(77,150,255,0.03)', minHeight: 80 }}
+                    />
+                  )}
+                </div>
               ))}
               {aliveBots.length === 0 && (
                 <div
