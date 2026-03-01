@@ -107,3 +107,16 @@ temp/
 
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
+
+# Screenshots & debug scripts
+screenshot-*.png
+screenshot-*.mjs
+screenshot*.png
+
+# Python cache & debug sprites
+__pycache__/
+*.pyc
+client/public/sprites/characters/_debug_*
+client/public/sprites/characters/_source_*
+client/public/sprites/characters/_ai_raw/
+client/public/sprites/characters/_refs/

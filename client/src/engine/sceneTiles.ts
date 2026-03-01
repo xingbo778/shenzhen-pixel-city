@@ -117,32 +117,9 @@ const TECH_MAP: TileType[][] = [
   [G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G]
 ]
 
-const CBD_MAP: TileType[][] = [
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
-  [P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P],
-  [G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G],
-  [S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S],
-  [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E],
-  [R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R],
-  [R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R],
-  [R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R],
-  [R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R, R],
-  [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E, E],
-  [S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S, S],
-  [G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G],
-  [G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G],
-  [P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P],
-  [P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P],
-  [P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P]
-]
+// ─── 福田CBD: procedurally generated large city ──────────────────────────
+import { generateCity } from './proceduralCity'
+const CBD_GENERATED = generateCity(150, 100, 42)
 
 const HUAQIANG_MAP: TileType[][] = [
   [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
@@ -716,10 +693,18 @@ export const PAVILION: SpriteData = (() => {
 
 // ── Scene Object Config ───────────────────────────────────────────
 export interface SceneObject {
+  /** Legacy pixel-art data — used when pngKey is absent. */
   sprite: SpriteData
+  /** Key into the objects_manifest.json — triggers PNG rendering. */
+  pngKey?: string
   col: number
   row: number
   zY?: number
+  /** Per-instance visual scale multiplier — only affects height in 3D. */
+  scale?: number
+  /** Footprint in tiles (width = cols, height = rows). Buildings size to fit. */
+  tileW?: number
+  tileH?: number
 }
 
 export interface SceneConfig {
@@ -892,64 +877,13 @@ export const SCENE_CONFIGS: Record<string, SceneConfig> = {
 
   '福田CBD': {
     name: '福田CBD',
-    cols: 36, rows: 24,
-    tilemap: CBD_MAP,
+    cols: CBD_GENERATED.cols,
+    rows: CBD_GENERATED.rows,
+    tilemap: CBD_GENERATED.tilemap,
     ambientColor: '#C77DFF',
-    lightColor: '#DD99FF',
-    walkableRowStart: 12,
-    objects: [
-      // 第一排高楼（row 0）- 5栋
-      { sprite: OFFICE_TOWER, col: 0, row: 0 },
-      { sprite: OFFICE_TOWER, col: 7, row: 0 },
-      { sprite: OFFICE_TOWER, col: 14, row: 0 },
-      { sprite: OFFICE_TOWER, col: 21, row: 0 },
-      { sprite: OFFICE_TOWER, col: 28, row: 0 },
-      // 广场树木（row 8）
-      { sprite: STREET_TREE, col: 0, row: 8 },
-      { sprite: STREET_TREE, col: 3, row: 8 },
-      { sprite: STREET_TREE, col: 6, row: 8 },
-      { sprite: STREET_TREE, col: 9, row: 8 },
-      { sprite: STREET_TREE, col: 12, row: 8 },
-      { sprite: STREET_TREE, col: 15, row: 8 },
-      { sprite: STREET_TREE, col: 18, row: 8 },
-      { sprite: STREET_TREE, col: 21, row: 8 },
-      { sprite: STREET_TREE, col: 24, row: 8 },
-      { sprite: STREET_TREE, col: 27, row: 8 },
-      { sprite: STREET_TREE, col: 30, row: 8 },
-      { sprite: STREET_TREE, col: 33, row: 8 },
-      // 绿化带（双排）
-      { sprite: BUSH_CLUSTER, col: 0, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 5, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 10, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 15, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 20, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 25, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 30, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 2, row: 10 },
-      { sprite: BUSH_CLUSTER, col: 7, row: 10 },
-      { sprite: BUSH_CLUSTER, col: 12, row: 10 },
-      { sprite: BUSH_CLUSTER, col: 17, row: 10 },
-      { sprite: BUSH_CLUSTER, col: 22, row: 10 },
-      { sprite: BUSH_CLUSTER, col: 27, row: 10 },
-      { sprite: BUSH_CLUSTER, col: 32, row: 10 },
-      // 地铁站
-      { sprite: METRO_ENTRANCE, col: 3, row: 18 },
-      { sprite: METRO_ENTRANCE, col: 20, row: 18 },
-      // 路灯
-      { sprite: STREET_LAMP, col: 6, row: 12 },
-      { sprite: STREET_LAMP, col: 14, row: 12 },
-      { sprite: STREET_LAMP, col: 22, row: 12 },
-      { sprite: STREET_LAMP, col: 30, row: 12 },
-      // 停放车辆
-      { sprite: PARKED_CAR_DARK, col: 0, row: 15 },
-      { sprite: PARKED_CAR_DARK, col: 9, row: 15 },
-      { sprite: PARKED_CAR_DARK, col: 18, row: 15 },
-      { sprite: PARKED_CAR_DARK, col: 27, row: 15 },
-      { sprite: PARKED_CAR_WHITE, col: 4, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 13, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 22, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 31, row: 16 },
-    ],
+    lightColor:   '#DD99FF',
+    walkableRowStart: 0,
+    objects: CBD_GENERATED.objects,
   },
 
   '华强北': {
@@ -1187,3 +1121,19 @@ export const SCENE_CONFIGS: Record<string, SceneConfig> = {
     ],
   },
 }
+
+// ── Register PNG sprite upgrades ──────────────────────────────────
+// Must run after all SpriteData constants are defined.
+// Sprites without a registered key fall back to SpriteData rendering.
+import { registerSpritePngKey } from './spritePngMap'
+
+// Fallback (global): SpriteData → PNG key for objects that don't carry an explicit pngKey
+registerSpritePngKey(VILLAGE_BUILDING,  'village_building')
+registerSpritePngKey(OFFICE_TOWER,      'office_tower')
+registerSpritePngKey(CONVENIENCE_STORE, 'shop_building')
+registerSpritePngKey(STREET_TREE,       'street_tree')
+registerSpritePngKey(PARK_TREE,         'street_tree')
+registerSpritePngKey(BUSH_CLUSTER,      'bush_cluster')
+registerSpritePngKey(STREET_LAMP,       'street_lamp')
+registerSpritePngKey(TRASH_BIN,         'trash_can')
+registerSpritePngKey(METRO_ENTRANCE,    'metro_entrance')

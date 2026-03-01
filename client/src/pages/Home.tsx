@@ -6,9 +6,10 @@
  *       点击 Bot 卡片时右侧切换为 Bot 详情
  */
 
-import { useState, useCallback, useRef, useEffect, memo, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useWorldData, sendMessage, setEngineUrl } from "@/hooks/useWorldData";
-import PixelCityMap from "@/components/PixelCityMap";
+import { OVERVIEW_TO_SCENE_KEY } from "@/config/scenes";
+import PixelCityMap3D from "@/components/PixelCityMap3D";
 import CityOverviewMap from "@/components/CityOverviewMap";
 import BotCard from "@/components/BotCard";
 import BotDetailPanel from "@/components/BotDetailPanel";
@@ -47,17 +48,7 @@ export default function Home() {
 
   // Handle overview map location click → zoom into scene
   const handleOverviewLocationSelect = useCallback((locationKey: string) => {
-    // Map overview keys to scene config keys
-    const keyMap: Record<string, string> = {
-      'baoan_urban_village': '宝安城中村',
-      'nanshan_tech_park':   '南山科技园',
-      'futian_cbd':          '福田CBD',
-      'huaqiangbei':         '华强北',
-      'dongmen_oldstreet':   '东门老街',
-      'nanshan_apartments':  '南山公寓',
-      'shenzhen_bay_park':   '深圳湾公园',
-    };
-    const sceneName = keyMap[locationKey] || '宝安城中村';
+    const sceneName = OVERVIEW_TO_SCENE_KEY[locationKey] || '宝安城中村';
     setZoomAnimating(true);
     setTimeout(() => {
       setCurrentMapLocation(sceneName);
@@ -224,7 +215,7 @@ export default function Home() {
           {/* 场景层 - 条件渲染 */}
           {mapLayer === 'scene' && (
             <div style={{ position: "absolute", inset: 0 }}>
-              <PixelCityMap
+              <PixelCityMap3D
                 world={world}
                 selectedBotId={selectedBotId}
                 onBotClick={handleBotClick}
