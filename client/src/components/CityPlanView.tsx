@@ -6,7 +6,7 @@
  * before switching to the 3D view.
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import type { SceneConfig, SceneObject, TileType } from '@/engine/sceneTiles'
 import { TILE_COLORS } from '@/engine/sceneTiles'
 import { isFurnitureKey } from '@/engine/three/StreetFurniture3D'
@@ -16,6 +16,10 @@ const tileColor = (t: TileType): string => TILE_COLORS[t]?.base ?? '#222'
 
 // ── Object category colors ───────────────────────────────────────────
 const OBJ_COLORS: Record<string, string> = {
+  landmark_civic:  '#FF6B6B',
+  landmark_pingan: '#FF4444',
+  landmark_expo:   '#FF8866',
+  landmark_kk100:  '#FF5555',
   office_tower:  '#4488FF',
   cbd_building:  '#3366DD',
   apartment_block: '#88AACC',
@@ -82,11 +86,11 @@ export default function CityPlanView({ sceneConfig }: Props) {
   const dragging = useRef(false)
   const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 })
 
-  const { cols, rows, tilemap, objects } = sceneConfig
+  const { cols, rows, tilemap, objects, roadLabels, landmarkLabels } = sceneConfig
 
-  // Separate buildings from furniture
-  const buildings = objects.filter(o => o.pngKey && !isFurnitureKey(o.pngKey))
-  const furniture = objects.filter(o => o.pngKey && isFurnitureKey(o.pngKey))
+  // Separate buildings from furniture (memoized to avoid re-creating arrays on every render)
+  const buildings = useMemo(() => objects.filter(o => o.pngKey && !isFurnitureKey(o.pngKey)), [objects])
+  const furniture = useMemo(() => objects.filter(o => o.pngKey && isFurnitureKey(o.pngKey)), [objects])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -187,6 +191,58 @@ export default function CityPlanView({ sceneConfig }: Props) {
       }
     }
 
+    // Road name labels
+    if (roadLabels && pxPerTile > 2) {
+      ctx.font = `bold ${Math.max(9, pxPerTile * 0.7)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      for (const rl of roadLabels) {
+        const lx = baseX + rl.col * pxPerTile
+        const ly = baseY + rl.row * pxPerTile
+        ctx.save()
+        if (rl.direction === 'v') {
+          ctx.translate(lx, ly)
+          ctx.rotate(-Math.PI / 2)
+          ctx.fillStyle = 'rgba(0,0,0,0.5)'
+          ctx.fillText(rl.name, 1, 1)
+          ctx.fillStyle = '#FFD700'
+          ctx.fillText(rl.name, 0, 0)
+        } else {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)'
+          ctx.fillText(rl.name, lx + 1, ly + 1)
+          ctx.fillStyle = '#FFD700'
+          ctx.fillText(rl.name, lx, ly)
+        }
+        ctx.restore()
+      }
+    }
+
+    // Landmark labels
+    if (landmarkLabels && pxPerTile > 2) {
+      for (const lm of landmarkLabels) {
+        const lx = baseX + (lm.col + lm.w / 2) * pxPerTile
+        const ly = baseY + (lm.row + lm.h / 2) * pxPerTile
+        const lw = lm.w * pxPerTile
+        const lh = lm.h * pxPerTile
+
+        // Dashed border
+        ctx.setLineDash([4, 3])
+        ctx.strokeStyle = '#FF6B6B88'
+        ctx.lineWidth = 1.5
+        ctx.strokeRect(baseX + lm.col * pxPerTile, baseY + lm.row * pxPerTile, lw, lh)
+        ctx.setLineDash([])
+
+        // Name
+        ctx.font = `bold ${Math.max(10, pxPerTile * 0.8)}px sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'
+        ctx.fillText(lm.name, lx + 1, ly + 1, lw - 4)
+        ctx.fillStyle = '#FF6B6B'
+        ctx.fillText(lm.name, lx, ly, lw - 4)
+      }
+    }
+
     // Stats overlay
     ctx.fillStyle = 'rgba(0,0,0,0.6)'
     ctx.fillRect(8, 8, 180, 60)
@@ -197,7 +253,7 @@ export default function CityPlanView({ sceneConfig }: Props) {
     ctx.fillText(`Grid: ${cols} × ${rows}`, 14, 14)
     ctx.fillText(`Buildings: ${buildings.length}`, 14, 28)
     ctx.fillText(`Furniture: ${furniture.length}`, 14, 42)
-  }, [cols, rows, tilemap, buildings, furniture, zoom, offset])
+  }, [cols, rows, tilemap, buildings, furniture, zoom, offset, roadLabels, landmarkLabels])
 
   // Redraw on any state change
   useEffect(() => { draw() }, [draw])

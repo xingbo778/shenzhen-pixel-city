@@ -11,7 +11,7 @@
  * reused unchanged from the 2D engine.
  */
 
-import { useRef, useEffect, useCallback, useState, lazy, Suspense } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import type { WorldState } from '@/types/world'
 import { getDominantEmotion } from '@/types/world'
 import { SCENE_META, SCENE_NAMES, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/config/scenes'
@@ -28,7 +28,7 @@ import {
 import type { VehicleState } from '@/engine/vehicleSystem'
 import { useGameLoop } from '@/hooks/useGameLoop'
 
-import { createThreeScene, setCameraTarget, pixelToWorld } from '@/engine/three/ThreeScene'
+import { createThreeScene, setCameraTarget } from '@/engine/three/ThreeScene'
 import type { ThreeSceneHandle }   from '@/engine/three/ThreeScene'
 import { buildTileGrid3D }         from '@/engine/three/TileGrid3D'
 import type { TileGrid3DHandle }   from '@/engine/three/TileGrid3D'
@@ -42,6 +42,8 @@ import {
   tickBubbleLabels,
 } from '@/engine/three/CharacterSprites3D'
 import type { CharacterSprites3DHandle, BubbleLabel } from '@/engine/three/CharacterSprites3D'
+import { buildVehicles3D } from '@/engine/three/Vehicles3D'
+import type { Vehicles3DHandle } from '@/engine/three/Vehicles3D'
 import { TILE_SIZE } from '@/engine/three/ThreeScene'
 import CityPlanView from './CityPlanView'
 
@@ -71,6 +73,7 @@ export default function PixelCityMap3D({
   const buildingsRef  = useRef<Buildings3DHandle | null>(null)
   const furnitureRef  = useRef<StreetFurniture3DHandle | null>(null)
   const charRef       = useRef<CharacterSprites3DHandle | null>(null)
+  const vehicles3DRef = useRef<Vehicles3DHandle | null>(null)
   const bubblesRef    = useRef<BubbleLabel[]>([])
 
   // Game logic refs (reused from PixelCityMap)
@@ -85,7 +88,6 @@ export default function PixelCityMap3D({
   const isDraggingRef = useRef(false)
   const dragStartRef  = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
 
-  const [, forceUpdate] = useState(0)
   const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
 
   const activeLocation = currentLocation || SCENE_NAMES[0]
@@ -143,6 +145,11 @@ export default function PixelCityMap3D({
       furnitureRef.current.dispose()
       furnitureRef.current = null
     }
+    if (vehicles3DRef.current) {
+      scene.remove(vehicles3DRef.current.group)
+      vehicles3DRef.current.dispose()
+      vehicles3DRef.current = null
+    }
 
     // Create sprites handle if needed
     if (!charRef.current) {
@@ -171,6 +178,13 @@ export default function PixelCityMap3D({
       if (!threeRef.current) return
       threeRef.current.scene.add(furn.group)
       furnitureRef.current = furn
+    })
+
+    // 3D vehicles on roads (async — loads GLB models)
+    buildVehicles3D(sceneConfig.tilemap, 120).then(v3d => {
+      if (!threeRef.current) return
+      threeRef.current.scene.add(v3d.group)
+      vehicles3DRef.current = v3d
     })
 
     // Reset camera to map centre
@@ -241,7 +255,7 @@ export default function PixelCityMap3D({
     // Demo fallback: spawn wandering NPCs when no world data
     if (!world && !demoSpawnedRef.current) {
       demoSpawnedRef.current = true
-      const DEMO_COUNT = 20
+      const DEMO_COUNT = 30
       const occupations = ['walk_around', '散步', '逛街', 'work', 'rest', 'exercise']
       for (let i = 0; i < DEMO_COUNT; i++) {
         const demoId = `demo_${i}`
@@ -330,6 +344,9 @@ export default function PixelCityMap3D({
         }
       }
     })
+
+    // Tick 3D vehicles
+    vehicles3DRef.current?.tick(dt)
 
     // Bubble labels
     bubblesRef.current = tickBubbleLabels(

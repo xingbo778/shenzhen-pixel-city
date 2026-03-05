@@ -7,8 +7,10 @@ import type { TileType } from './sceneTiles'
 
 export type NavMode = 'pedestrian' | 'vehicle' | 'boat'
 
-const PEDESTRIAN_WALKABLE: Set<TileType> = new Set([
+const PEDESTRIAN_WALKABLE = new Set<TileType>([
   'road_h', 'road_v', 'road_cross',
+  'road_cross_zebra_n', 'road_cross_zebra_s', 'road_cross_zebra_w', 'road_cross_zebra_e',
+  'road_stop_h', 'road_stop_v',
   'sidewalk', 'sidewalk_edge',
   'alley',
   'grass', 'grass_lush',
@@ -16,11 +18,13 @@ const PEDESTRIAN_WALKABLE: Set<TileType> = new Set([
   'park_path',
 ])
 
-const VEHICLE_DRIVABLE: Set<TileType> = new Set([
+const VEHICLE_DRIVABLE = new Set<TileType>([
   'road_h', 'road_v', 'road_cross',
+  'road_cross_zebra_n', 'road_cross_zebra_s', 'road_cross_zebra_w', 'road_cross_zebra_e',
+  'road_stop_h', 'road_stop_v',
 ])
 
-const BOAT_NAVIGABLE: Set<TileType> = new Set([
+const BOAT_NAVIGABLE = new Set<TileType>([
   'water', 'water_edge',
 ])
 

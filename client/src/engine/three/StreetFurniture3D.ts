@@ -343,7 +343,7 @@ export async function buildStreetFurniture3D(objects: SceneObject[]): Promise<St
   const furnitureObjs = objects.filter(o => o.pngKey && isFurnitureKey(o.pngKey))
 
   // Try loading GLBs for all unique keys
-  const uniqueKeys = [...new Set(furnitureObjs.map(o => o.pngKey!))]
+  const uniqueKeys = Array.from(new Set(furnitureObjs.map(o => o.pngKey!)))
   await Promise.all(uniqueKeys.map(k => loadGLB(k)))
 
   for (const obj of furnitureObjs) {
