@@ -113,6 +113,42 @@ TEXTURE_SPECS = {
             "glass skylight panels, grey concrete. Pixel art style."
         ),
     },
+    "office_tower_v3": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen CBD double-skin glass tower facade. "
+            "Floor-to-ceiling blue-grey glass curtain wall, ultra-thin white aluminum frame, "
+            "subtle horizontal sunshade louvers between every 2 floors. "
+            "Some windows show warm interior light. Pixel art style, 8-bit aesthetic."
+        ),
+        "roof": (
+            "Top-down view of a luxury office tower rooftop in Shenzhen. "
+            "Helicopter landing pad, antenna array, glass skylight strip. Pixel art style."
+        ),
+    },
+    "office_tower_v4": {
+        "facade": (
+            "Seamless tileable texture of a contemporary Shenzhen high-tech park tower facade. "
+            "Dark charcoal grey glass panels with bright LED accent strips between floors, "
+            "vertical fin-like aluminum sunshades on alternating bays. "
+            "Clean geometric pattern. Pixel art style, 8-bit aesthetic."
+        ),
+        "roof": (
+            "Top-down view of a tech park tower rooftop. Solar panel array, "
+            "telecom base station, grey concrete. Pixel art style."
+        ),
+    },
+    "office_tower_v5": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen Futian super-tall office tower facade. "
+            "Diamond-pattern structural glass with visible diagonal bracing in white steel, "
+            "blue-tinted reflective glass, parametric facade geometry. "
+            "Pixel art style, 8-bit aesthetic, futuristic modern."
+        ),
+        "roof": (
+            "Top-down view of a supertall tower rooftop. Spire base, maintenance crane, "
+            "aircraft warning lights, steel grey surface. Pixel art style."
+        ),
+    },
 
     # ── CBD buildings ────────────────────────────────────────────────────────
     "cbd_building": {
@@ -146,6 +182,42 @@ TEXTURE_SPECS = {
         "roof": (
             "Top-down view of a building rooftop. Tan concrete, "
             "two air conditioning units, water tank. Pixel art style."
+        ),
+    },
+    "cbd_building_v3": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen Futian mixed-use tower facade. "
+            "Lower floors: stone-clad podium with large retail windows and metal canopy. "
+            "Upper floors: light grey glass curtain wall with slim white mullions. "
+            "Pixel art style, 8-bit aesthetic."
+        ),
+        "roof": (
+            "Top-down view of a mixed-use tower rooftop. Grey concrete, "
+            "HVAC cluster, water tank, green planter strip. Pixel art style."
+        ),
+    },
+    "cbd_building_v4": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen modern corporate headquarters facade. "
+            "All-glass unitized curtain wall, champagne gold aluminum frames, "
+            "triple-glazed panels reflecting sky. Every 4th floor has a recessed shadow gap. "
+            "Pixel art style, 8-bit aesthetic, premium corporate feel."
+        ),
+        "roof": (
+            "Top-down view of corporate HQ rooftop. Rooftop garden with grass, "
+            "glass conference room skylight, antenna mast. Pixel art style."
+        ),
+    },
+    "cbd_building_v5": {
+        "facade": (
+            "Seamless tileable texture of a white minimalist Shenzhen office facade. "
+            "White aluminum composite panel cladding, narrow horizontal ribbon windows, "
+            "clean modernist grid, subtle shadow lines. "
+            "Pixel art style, 8-bit aesthetic, Bauhaus-inspired."
+        ),
+        "roof": (
+            "Top-down view of a minimalist office rooftop. White membrane roof, "
+            "recessed mechanical well, clean edges. Pixel art style."
         ),
     },
 
@@ -183,6 +255,30 @@ TEXTURE_SPECS = {
             "potted plants, water tanks. Pixel art style."
         ),
     },
+    "apartment_block_v3": {
+        "facade": (
+            "Seamless tileable texture of a modern Shenzhen high-rise residential facade. "
+            "Warm grey stone-look cladding, large floor-to-ceiling windows, "
+            "glass-railed balconies with occasional green plants, "
+            "slim AC units. Pixel art style, 8-bit aesthetic."
+        ),
+        "roof": (
+            "Top-down view of a modern residential rooftop. Rooftop garden, "
+            "children play area, grey concrete path. Pixel art style."
+        ),
+    },
+    "apartment_block_v4": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen affordable housing tower facade. "
+            "Yellow-ochre plaster walls, uniform rows of small windows with AC units, "
+            "enclosed balconies with frosted glass. Dense grid pattern. "
+            "Pixel art style, 8-bit aesthetic."
+        ),
+        "roof": (
+            "Top-down view of housing tower rooftop. Water tanks, many satellite dishes, "
+            "clotheslines, weathered concrete. Pixel art style."
+        ),
+    },
 
     # ── Shop buildings ───────────────────────────────────────────────────────
     "shop_building": {
@@ -216,6 +312,18 @@ TEXTURE_SPECS = {
         "roof": (
             "Top-down view of a modern shop rooftop. White concrete, "
             "sign board mounting, clean surface. Pixel art style."
+        ),
+    },
+    "shop_building_v3": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen modern street-level commercial facade. "
+            "Ground floor: full-height glass with branded signage and LED lightbox. "
+            "Upper floor: grey aluminum panel cladding with narrow windows. "
+            "Pixel art style, 8-bit aesthetic."
+        ),
+        "roof": (
+            "Top-down view of a commercial rooftop. Billboard mounting, "
+            "small AC units, grey surface. Pixel art style."
         ),
     },
 
@@ -252,6 +360,20 @@ TEXTURE_SPECS = {
         "roof": (
             "Top-down view of a weathered village rooftop. Mossy patches, "
             "broken antenna, old water tank. Pixel art style."
+        ),
+    },
+    "village_building_v3": {
+        "facade": (
+            "Seamless tileable texture of a Shenzhen urban village 握手楼 handshake building. "
+            "Narrow tall building, closely packed small windows with iron bars, "
+            "many window-mounted AC units, exposed water pipes running down the wall, "
+            "faded paint and plaster, neon shop signs at ground level. "
+            "Pixel art style, 8-bit aesthetic, dense urban feel."
+        ),
+        "roof": (
+            "Top-down view of an urban village handshake building rooftop. "
+            "Cramped with water tanks, tangled wires, drying racks, corrugated sheets. "
+            "Pixel art style."
         ),
     },
 
