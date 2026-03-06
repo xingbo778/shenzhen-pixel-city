@@ -3,6 +3,7 @@
  * 现代 dashboard 风格，玻璃拟态 + ring 选中态
  */
 
+import { memo } from "react";
 import { BOT_COLORS, BOT_ROLES, getDominantEmotion } from "@/types/world";
 import type { BotState } from "@/types/world";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,7 @@ interface Props {
   onClick: () => void;
 }
 
-export default function BotCard({ botId, bot, isSelected, onClick }: Props) {
+export default memo(function BotCard({ botId, bot, isSelected, onClick }: Props) {
   const color = BOT_COLORS[botId] || "#4d96ff";
   const role = BOT_ROLES[botId] || "居民";
   const emotion = getDominantEmotion(bot.emotions);
@@ -133,4 +134,4 @@ export default function BotCard({ botId, bot, isSelected, onClick }: Props) {
       )}
     </div>
   );
-}
+})

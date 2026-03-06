@@ -156,6 +156,7 @@ interface CharEntry {
   prevX?: number
   prevZ?: number
   facingAngle?: number
+  lastScale?: number
   // Sprite mode
   sprite?: THREE.Sprite
   material?: THREE.SpriteMaterial
@@ -213,14 +214,27 @@ export function createCharacterSprites3D(): CharacterSprites3DHandle {
     return entry
   }
 
+  function disposeEntry(entry: CharEntry) {
+    if (entry.model) {
+      entry.model.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose()
+          const mats = Array.isArray(child.material) ? child.material : [child.material]
+          mats.forEach(m => m.dispose?.())
+        }
+      })
+      group.remove(entry.model)
+    }
+    if (entry.sprite) {
+      group.remove(entry.sprite)
+      entry.material?.dispose()
+    }
+  }
+
   function removeStale(activeIds: Set<string>) {
     Array.from(entries.entries()).forEach(([id, entry]) => {
       if (!activeIds.has(id)) {
-        if (entry.model) group.remove(entry.model)
-        if (entry.sprite) {
-          group.remove(entry.sprite)
-          entry.material?.dispose()
-        }
+        disposeEntry(entry)
         entries.delete(id)
       }
     })
@@ -279,7 +293,10 @@ export function createCharacterSprites3D(): CharacterSprites3DHandle {
         entry.model.rotation.x = swing * WALK_LEAN
 
         const s = (entry.baseScale ?? 1) * (botId === selectedBotId ? 1.3 : 1.0)
-        entry.model.scale.setScalar(s)
+        if (entry.lastScale !== s) {
+          entry.model.scale.setScalar(s)
+          entry.lastScale = s
+        }
       } else if (entry.sprite && entry.material) {
         entry.sprite.position.x = worldX
         entry.sprite.position.z = worldZ
@@ -299,13 +316,7 @@ export function createCharacterSprites3D(): CharacterSprites3DHandle {
   }
 
   function dispose() {
-    entries.forEach(entry => {
-      if (entry.model) group.remove(entry.model)
-      if (entry.sprite) {
-        group.remove(entry.sprite)
-        entry.material?.dispose()
-      }
-    })
+    entries.forEach(entry => disposeEntry(entry))
     entries.clear()
   }
 

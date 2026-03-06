@@ -81,14 +81,6 @@ export function createThreeScene(
 
   const sun = new THREE.DirectionalLight(0xffeedd, 1.2)
   sun.position.set(100, 150, 80)
-  sun.castShadow = true
-  sun.shadow.mapSize.set(2048, 2048)
-  sun.shadow.camera.near = 0.5
-  sun.shadow.camera.far  = 400
-  sun.shadow.camera.left   = -100
-  sun.shadow.camera.right  =  100
-  sun.shadow.camera.top    =  100
-  sun.shadow.camera.bottom = -100
   scene.add(sun)
 
   const fill = new THREE.DirectionalLight(0xaaccff, 0.4)
@@ -113,6 +105,13 @@ export function createThreeScene(
   }
 
   function dispose() {
+    scene.traverse(obj => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry?.dispose()
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach((m: THREE.Material) => m.dispose())
+      }
+    })
     renderer.dispose()
     if (labelLayer.parentElement) {
       labelLayer.parentElement.removeChild(labelLayer)

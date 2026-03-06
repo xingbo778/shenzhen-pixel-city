@@ -66,6 +66,7 @@ function isLandmarkKey(key: string): boolean {
 // ── Texture loading ──────────────────────────────────────────────────
 const texLoader = new THREE.TextureLoader()
 const texCache  = new Map<string, THREE.Texture>()
+const matCache  = new Map<string, THREE.MeshLambertMaterial>()
 
 function loadTex(url: string): THREE.Texture {
   if (texCache.has(url)) return texCache.get(url)!
@@ -282,9 +283,15 @@ function buildTexturedBox(
 
   const { facade, roof } = getBuildingTextures(key)
 
-  const facadeMat = new THREE.MeshLambertMaterial({ map: facade })
-  const roofMat   = new THREE.MeshLambertMaterial({ map: roof })
-  const bottomMat = new THREE.MeshLambertMaterial({ color: 0x222222 })
+  const facadeKey = `facade:${key}`
+  const roofKey   = `roof:${key}`
+  const bottomKey = 'bottom'
+  if (!matCache.has(facadeKey)) matCache.set(facadeKey, new THREE.MeshLambertMaterial({ map: facade }))
+  if (!matCache.has(roofKey))   matCache.set(roofKey,   new THREE.MeshLambertMaterial({ map: roof }))
+  if (!matCache.has(bottomKey)) matCache.set(bottomKey, new THREE.MeshLambertMaterial({ color: 0x222222 }))
+  const facadeMat = matCache.get(facadeKey)!
+  const roofMat   = matCache.get(roofKey)!
+  const bottomMat = matCache.get(bottomKey)!
 
   const materials = [
     facadeMat, facadeMat,   // +x, -x
@@ -379,13 +386,13 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
     group.traverse(child => {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose()
-        const mats = Array.isArray(child.material) ? child.material : [child.material]
-        mats.forEach(m => {
-          if (m.map) m.map.dispose()
-          m.dispose()
-        })
       }
     })
+    matCache.forEach(m => {
+      if (m.map) m.map.dispose()
+      m.dispose()
+    })
+    matCache.clear()
     texCache.clear()
   }
 

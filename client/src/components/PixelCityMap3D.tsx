@@ -325,13 +325,14 @@ export default function PixelCityMap3D({
     const navMesh    = navMeshRef.current?.ped
     if (!three || !sc) return
 
-    // Tick entities
+    // Tick entities — throttle A* to max 2 per frame to avoid hitching
+    let pathsThisFrame = 0
     Object.entries(entitiesRef.current).forEach(([botId, entity]) => {
       tickEntity(entity, dt, VIRTUAL_TILE_PX)
 
-      if (entity.pathIdx >= entity.path.length && navMesh) {
+      if (entity.pathIdx >= entity.path.length && navMesh && pathsThisFrame < 2) {
+        pathsThisFrame++
         if (botId.startsWith('demo_')) {
-          // Demo entities: short nearby paths to keep A* fast
           const dest = randomWalkableTile(navMesh, entity.row, 25)
           const path = findPath(navMesh, [entity.col, entity.row], dest)
           if (path.length > 1) {

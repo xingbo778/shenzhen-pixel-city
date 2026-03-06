@@ -796,3 +796,448 @@ export function generateCity(
 
   return { cols, rows, tilemap: grid, objects, roadLabels, landmarkLabels }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// 宝安城中村 — dense urban village with narrow alleys, handshake buildings
+// ══════════════════════════════════════════════════════════════════════
+
+export function generateVillage(
+  cols: number,
+  rows: number,
+  seed = 77,
+): ProceduralCityResult {
+  const rng = createRng(seed)
+  const grid: TileType[][] = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => 'building' as TileType),
+  )
+  const objects: SceneObject[] = []
+  const roadLabels: RoadLabel[] = []
+  const landmarkLabels: LandmarkLabel[] = []
+
+  function set(c: number, r: number, t: TileType) {
+    if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = t
+  }
+  function fill(x: number, y: number, w: number, h: number, t: TileType) {
+    for (let r = y; r < y + h; r++)
+      for (let c = x; c < x + w; c++) set(c, r, t)
+  }
+
+  // ── Road layout: main road + dense alleys ──
+  // Main east-west road (宝安大道)
+  const MAIN_ROAD = Math.round(rows * 0.55)
+  fill(0, MAIN_ROAD - 1, cols, 3, 'road_h')
+  roadLabels.push({ name: '宝安大道', col: Math.round(cols * 0.5), row: MAIN_ROAD, direction: 'h' })
+
+  // Secondary east-west road (上行路)
+  const SECONDARY_ROAD = Math.round(rows * 0.25)
+  fill(0, SECONDARY_ROAD, cols, 1, 'road_h')
+  roadLabels.push({ name: '上行路', col: Math.round(cols * 0.5), row: SECONDARY_ROAD, direction: 'h' })
+
+  // South residential road
+  const SOUTH_ROAD = Math.round(rows * 0.82)
+  fill(0, SOUTH_ROAD, cols, 1, 'road_h')
+
+  // North-south main roads (2 lanes)
+  const NS_ROADS = [
+    Math.round(cols * 0.25),
+    Math.round(cols * 0.55),
+    Math.round(cols * 0.85),
+  ]
+  for (const rx of NS_ROADS) {
+    fill(rx, 0, 2, rows, 'road_v')
+  }
+
+  // Dense alleys (1 tile wide) — characteristic of 城中村
+  const alleyRows: number[] = []
+  for (let r = 3; r < rows - 3; r += 4 + Math.floor(rng() * 3)) {
+    if (Math.abs(r - MAIN_ROAD) < 3 || Math.abs(r - SECONDARY_ROAD) < 2 || Math.abs(r - SOUTH_ROAD) < 2) continue
+    fill(0, r, cols, 1, 'alley')
+    alleyRows.push(r)
+  }
+  const alleyCols: number[] = []
+  for (let c = 4; c < cols - 4; c += 3 + Math.floor(rng() * 3)) {
+    if (NS_ROADS.some(rx => Math.abs(c - rx) < 3)) continue
+    fill(c, 0, 1, rows, 'alley')
+    alleyCols.push(c)
+  }
+
+  // Mark crossings
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const t = grid[r][c]
+      if (t !== 'road_h' && t !== 'road_v' && t !== 'alley') continue
+      const isH = t === 'road_h' || t === 'alley'
+      const isV = t === 'road_v' || t === 'alley'
+      if (!isH || !isV) {
+        // Check cross
+        const hasH = (c > 0 && (grid[r][c-1] === 'road_h' || grid[r][c-1] === 'alley')) ||
+                     (c < cols-1 && (grid[r][c+1] === 'road_h' || grid[r][c+1] === 'alley'))
+        const hasV = (r > 0 && (grid[r-1][c] === 'road_v' || grid[r-1][c] === 'alley')) ||
+                     (r < rows-1 && (grid[r+1][c] === 'road_v' || grid[r+1][c] === 'alley'))
+        if (hasH && hasV) grid[r][c] = 'road_cross'
+      }
+    }
+
+  // Sidewalks along main roads
+  for (let c = 0; c < cols; c++) {
+    for (const rr of [MAIN_ROAD - 2, MAIN_ROAD + 2]) {
+      if (rr >= 0 && rr < rows && grid[rr][c] === 'building') grid[rr][c] = 'sidewalk'
+    }
+    for (const rr of [SECONDARY_ROAD - 1, SECONDARY_ROAD + 1, SOUTH_ROAD - 1, SOUTH_ROAD + 1]) {
+      if (rr >= 0 && rr < rows && grid[rr][c] === 'building') grid[rr][c] = 'sidewalk'
+    }
+  }
+
+  // ── Small market area (菜市场) ──
+  const marketX = NS_ROADS[0] + 3
+  const marketY = MAIN_ROAD + 3
+  const marketW = 8, marketH = 5
+  if (marketX + marketW < cols && marketY + marketH < rows) {
+    fill(marketX, marketY, marketW, marketH, 'concrete')
+    landmarkLabels.push({ name: '西乡菜市场', col: marketX, row: marketY, w: marketW, h: marketH })
+    // Market stalls
+    for (let c = marketX + 1; c < marketX + marketW - 1; c += 2)
+      objects.push({ sprite: DUMMY, pngKey: 'shop_building_v1', col: c, row: marketY + 1, scale: 0.3, tileW: 2, tileH: 2 })
+  }
+
+  // ── Small park/green space ──
+  const parkX = NS_ROADS[1] + 4
+  const parkY = 2
+  const parkW = 6, parkH = 4
+  if (parkX + parkW < cols && parkY + parkH < SECONDARY_ROAD) {
+    for (let r = parkY; r < parkY + parkH; r++)
+      for (let c = parkX; c < parkX + parkW; c++)
+        if (grid[r][c] === 'building') grid[r][c] = rng() > 0.3 ? 'grass' : 'grass_lush'
+    landmarkLabels.push({ name: '街心公园', col: parkX, row: parkY, w: parkW, h: parkH })
+    for (let c = parkX + 1; c < parkX + parkW - 1; c += 2)
+      objects.push({ sprite: DUMMY, pngKey: rng() > 0.5 ? 'street_tree' : 'palm_tree', col: c, row: parkY + 1, scale: 1.3 + rng() * 0.4 })
+    objects.push({ sprite: DUMMY, pngKey: 'bench', col: parkX + 2, row: parkY + parkH - 1, scale: 1.2 })
+  }
+
+  // ── Fill building blocks ──
+  const placed = Array.from({ length: rows }, () => new Uint8Array(cols))
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (grid[r][c] !== 'building') placed[r][c] = 1
+
+  // Village buildings — small footprints, tightly packed (握手楼特色)
+  const villageKeys = ['village_building', 'village_building_v1', 'village_building_v2', 'village_building_v3']
+  const shopKeys = ['shop_building', 'shop_building_v1', 'shop_building_v2', 'shop_building_v3']
+  const aptKeys = ['apartment_block', 'apartment_block_v1', 'apartment_block_v2', 'apartment_block_v3', 'apartment_block_v4']
+
+  function canPlace(r: number, c: number, tw: number, th: number): boolean {
+    for (let dr = 0; dr < th; dr++)
+      for (let dc = 0; dc < tw; dc++) {
+        const nr = r + dr, nc = c + dc
+        if (nr >= rows || nc >= cols || grid[nr][nc] !== 'building' || placed[nr][nc]) return false
+      }
+    return true
+  }
+  function markPlaced(r: number, c: number, tw: number, th: number) {
+    for (let dr = 0; dr < th; dr++)
+      for (let dc = 0; dc < tw; dc++) placed[r + dr][c + dc] = 1
+  }
+
+  // Village buildings near main road get shops on ground floor
+  const mainRoadProximity = 8
+  const sizes: [number, number][] = [[3, 3], [3, 2], [2, 3], [2, 2]]
+  for (const [tw, th] of sizes) {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!canPlace(r, c, tw, th)) continue
+        markPlaced(r, c, tw, th)
+
+        const nearMain = Math.abs(r - MAIN_ROAD) < mainRoadProximity
+        let key: string
+        if (nearMain && rng() < 0.4) {
+          key = shopKeys[Math.floor(rng() * shopKeys.length)]
+        } else if (r > SOUTH_ROAD && rng() < 0.3) {
+          key = aptKeys[Math.floor(rng() * aptKeys.length)]
+        } else {
+          key = villageKeys[Math.floor(rng() * villageKeys.length)]
+        }
+
+        // Village buildings are low-rise (2-8 floors)
+        const scale = key.startsWith('village') ? 0.5 + rng() * 0.8
+          : key.startsWith('shop') ? 0.3 + rng() * 0.4
+          : 0.8 + rng() * 0.6
+
+        objects.push({
+          sprite: DUMMY, pngKey: key,
+          col: c, row: r, scale,
+          tileW: tw, tileH: th,
+        })
+      }
+    }
+  }
+
+  // Remaining single tiles become concrete
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (grid[r][c] === 'building' && !placed[r][c]) grid[r][c] = 'concrete'
+
+  // ── Street furniture ──
+  // Street trees along main roads
+  for (let c = 2; c < cols - 2; c += 6 + Math.floor(rng() * 3)) {
+    for (const sr of [MAIN_ROAD - 2, MAIN_ROAD + 2]) {
+      if (sr >= 0 && sr < rows && grid[sr][c] === 'sidewalk')
+        objects.push({ sprite: DUMMY, pngKey: 'street_tree', col: c, row: sr, scale: 1.2 + rng() * 0.3 })
+    }
+  }
+
+  // Street lamps
+  for (let c = 3; c < cols - 3; c += 8)
+    for (const sr of [MAIN_ROAD - 2, SECONDARY_ROAD - 1]) {
+      if (sr >= 0 && sr < rows && grid[sr][c] === 'sidewalk')
+        objects.push({ sprite: DUMMY, pngKey: 'street_lamp', col: c, row: sr, scale: 1.3 })
+    }
+
+  // Trash bins in alleys
+  for (const ar of alleyRows)
+    for (let c = 3; c < cols - 3; c += 8 + Math.floor(rng() * 5))
+      if (grid[ar]?.[c] === 'alley') objects.push({ sprite: DUMMY, pngKey: 'trash_bin', col: c, row: ar, scale: 1.0 })
+
+  return { cols, rows, tilemap: grid, objects, roadLabels, landmarkLabels }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 南山科技园 — modern tech park with glass towers and green campuses
+// ══════════════════════════════════════════════════════════════════════
+
+export function generateTechPark(
+  cols: number,
+  rows: number,
+  seed = 123,
+): ProceduralCityResult {
+  const rng = createRng(seed)
+  const grid: TileType[][] = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => 'building' as TileType),
+  )
+  const objects: SceneObject[] = []
+  const roadLabels: RoadLabel[] = []
+  const landmarkLabels: LandmarkLabel[] = []
+
+  function set(c: number, r: number, t: TileType) {
+    if (r >= 0 && r < rows && c >= 0 && c < cols) grid[r][c] = t
+  }
+  function fill(x: number, y: number, w: number, h: number, t: TileType) {
+    for (let r = y; r < y + h; r++)
+      for (let c = x; c < x + w; c++) set(c, r, t)
+  }
+
+  // ── Road layout: modern grid with wide boulevards ──
+  // Main east-west: 科苑大道
+  const ROAD_KEYUAN = Math.round(rows * 0.45)
+  fill(0, ROAD_KEYUAN - 1, cols, 3, 'road_h')
+  roadLabels.push({ name: '科苑大道', col: Math.round(cols * 0.5), row: ROAD_KEYUAN, direction: 'h' })
+
+  // Secondary: 高新南路
+  const ROAD_GAOXIN = Math.round(rows * 0.75)
+  fill(0, ROAD_GAOXIN, cols, 2, 'road_h')
+  roadLabels.push({ name: '高新南路', col: Math.round(cols * 0.5), row: ROAD_GAOXIN, direction: 'h' })
+
+  // North road
+  const ROAD_NORTH = Math.round(rows * 0.15)
+  fill(0, ROAD_NORTH, cols, 1, 'road_h')
+  roadLabels.push({ name: '科技路', col: Math.round(cols * 0.5), row: ROAD_NORTH, direction: 'h' })
+
+  // N-S roads — wider spacing for campus-style blocks
+  const NS_ROADS = [
+    { name: '科技南路', col: Math.round(cols * 0.18), hw: 1 },
+    { name: '科发路', col: Math.round(cols * 0.42), hw: 1 },
+    { name: '高新中路', col: Math.round(cols * 0.65), hw: 1 },
+    { name: '科伟路', col: Math.round(cols * 0.88), hw: 1 },
+  ]
+
+  for (const rd of NS_ROADS) {
+    for (let cc = rd.col - rd.hw; cc <= rd.col + rd.hw; cc++)
+      fill(cc, 0, 1, rows, 'road_v')
+    roadLabels.push({ name: rd.name, col: rd.col, row: Math.round(rows * 0.5), direction: 'v' })
+  }
+
+  // Mark crossings
+  const hRoadRows = new Set<number>()
+  const vRoadCols = new Set<number>()
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c] === 'road_h') hRoadRows.add(r)
+      if (grid[r][c] === 'road_v') vRoadCols.add(c)
+    }
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (hRoadRows.has(r) && vRoadCols.has(c)) grid[r][c] = 'road_cross'
+
+  // Sidewalks
+  for (let c = 0; c < cols; c++) {
+    for (const rr of [ROAD_KEYUAN - 2, ROAD_KEYUAN + 2, ROAD_GAOXIN - 1, ROAD_GAOXIN + 2, ROAD_NORTH - 1, ROAD_NORTH + 1]) {
+      if (rr >= 0 && rr < rows && grid[rr][c] === 'building') grid[rr][c] = 'sidewalk'
+    }
+  }
+  for (const rd of NS_ROADS) {
+    for (let r = 0; r < rows; r++) {
+      for (const cc of [rd.col - rd.hw - 1, rd.col + rd.hw + 1]) {
+        if (cc >= 0 && cc < cols && grid[r][cc] === 'building') grid[r][cc] = 'sidewalk'
+      }
+    }
+  }
+
+  // ── Tech campus green spaces ──
+  // 科技园中心公园
+  const cpX = NS_ROADS[1].col + 3
+  const cpY = ROAD_NORTH + 3
+  const cpW = NS_ROADS[2].col - NS_ROADS[1].col - 6
+  const cpH = Math.min(8, ROAD_KEYUAN - ROAD_NORTH - 6)
+  if (cpW > 4 && cpH > 3) {
+    for (let r = cpY; r < cpY + cpH; r++)
+      for (let c = cpX; c < cpX + cpW; c++)
+        if (r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c] === 'building')
+          grid[r][c] = rng() > 0.3 ? 'grass_lush' : 'grass'
+    // Cross path
+    fill(cpX + 1, cpY + Math.floor(cpH / 2), cpW - 2, 1, 'park_path')
+    fill(cpX + Math.floor(cpW / 2), cpY + 1, 1, cpH - 2, 'park_path')
+    // Trees
+    for (let r = cpY + 1; r < cpY + cpH - 1; r += 2)
+      for (let c = cpX + 1; c < cpX + cpW - 1; c += 2)
+        if ((grid[r]?.[c] === 'grass' || grid[r]?.[c] === 'grass_lush') && rng() < 0.5)
+          objects.push({ sprite: DUMMY, pngKey: rng() > 0.4 ? 'street_tree' : 'palm_tree', col: c, row: r, scale: 1.4 + rng() * 0.5 })
+    objects.push({ sprite: DUMMY, pngKey: 'fountain', col: cpX + Math.floor(cpW / 2), row: cpY + Math.floor(cpH / 2), scale: 1.5 })
+    landmarkLabels.push({ name: '科技园中心公园', col: cpX, row: cpY, w: cpW, h: cpH })
+  }
+
+  // 创业广场 (startup plaza)
+  const spX = NS_ROADS[0].col + 3
+  const spY = ROAD_KEYUAN + 4
+  const spW = NS_ROADS[1].col - NS_ROADS[0].col - 6
+  const spH = Math.min(6, ROAD_GAOXIN - ROAD_KEYUAN - 6)
+  if (spW > 4 && spH > 3) {
+    for (let r = spY; r < spY + spH; r++)
+      for (let c = spX; c < spX + spW; c++)
+        if (r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c] === 'building')
+          grid[r][c] = 'tile_plaza'
+    for (let c = spX + 2; c < spX + spW - 2; c += 3)
+      objects.push({ sprite: DUMMY, pngKey: 'palm_tree', col: c, row: spY + 1, scale: 1.4 })
+    landmarkLabels.push({ name: '创业广场', col: spX, row: spY, w: spW, h: spH })
+  }
+
+  // ── Fill building blocks ──
+  const placed = Array.from({ length: rows }, () => new Uint8Array(cols))
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (grid[r][c] !== 'building') placed[r][c] = 1
+
+  const officeKeys = ['office_tower', 'office_tower_v1', 'office_tower_v2', 'office_tower_v3', 'office_tower_v4', 'office_tower_v5']
+  const cbdKeys = ['cbd_building', 'cbd_building_v1', 'cbd_building_v2', 'cbd_building_v3', 'cbd_building_v4', 'cbd_building_v5']
+  const aptKeys = ['apartment_block', 'apartment_block_v1', 'apartment_block_v2', 'apartment_block_v3', 'apartment_block_v4']
+  const shopKeys = ['shop_building', 'shop_building_v1', 'shop_building_v2', 'shop_building_v3']
+
+  function canPlace(r: number, c: number, tw: number, th: number): boolean {
+    for (let dr = 0; dr < th; dr++)
+      for (let dc = 0; dc < tw; dc++) {
+        const nr = r + dr, nc = c + dc
+        if (nr >= rows || nc >= cols || grid[nr][nc] !== 'building' || placed[nr][nc]) return false
+      }
+    return true
+  }
+  function markPlaced(r: number, c: number, tw: number, th: number) {
+    for (let dr = 0; dr < th; dr++)
+      for (let dc = 0; dc < tw; dc++) placed[r + dr][c + dc] = 1
+  }
+
+  // Tech park: larger footprint buildings, more height variety
+  const sizes: [number, number][] = [[5, 5], [4, 5], [5, 4], [4, 4], [4, 3], [3, 4], [3, 3], [3, 2], [2, 3], [2, 2]]
+  for (const [tw, th] of sizes) {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!canPlace(r, c, tw, th)) continue
+        markPlaced(r, c, tw, th)
+
+        const nearKeyuan = Math.abs(r - ROAD_KEYUAN) < 10
+        const southZone = r > ROAD_GAOXIN
+
+        let key: string
+        const roll = rng()
+        if (nearKeyuan) {
+          // Core tech zone: mostly office towers
+          key = roll < 0.55 ? officeKeys[Math.floor(rng() * officeKeys.length)]
+            : roll < 0.85 ? cbdKeys[Math.floor(rng() * cbdKeys.length)]
+            : shopKeys[Math.floor(rng() * shopKeys.length)]
+        } else if (southZone) {
+          // South: residential + commercial
+          key = roll < 0.2 ? officeKeys[Math.floor(rng() * officeKeys.length)]
+            : roll < 0.5 ? aptKeys[Math.floor(rng() * aptKeys.length)]
+            : shopKeys[Math.floor(rng() * shopKeys.length)]
+        } else {
+          // General tech area
+          key = roll < 0.4 ? officeKeys[Math.floor(rng() * officeKeys.length)]
+            : roll < 0.7 ? cbdKeys[Math.floor(rng() * cbdKeys.length)]
+            : roll < 0.85 ? aptKeys[Math.floor(rng() * aptKeys.length)]
+            : shopKeys[Math.floor(rng() * shopKeys.length)]
+        }
+
+        const distToKeyuan = Math.abs((r + th / 2) - ROAD_KEYUAN)
+        const heightBonus = distToKeyuan < 12 ? (1 - distToKeyuan / 12) * 1.5 : 0
+
+        let scale: number
+        if (key.startsWith('office_tower')) scale = 1.5 + rng() * 2.0 + heightBonus
+        else if (key.startsWith('cbd_building')) scale = 1.2 + rng() * 1.5 + heightBonus * 0.6
+        else if (key.startsWith('apartment')) scale = 0.8 + rng() * 0.8
+        else scale = 0.4 + rng() * 0.4
+
+        objects.push({
+          sprite: DUMMY, pngKey: key,
+          col: c, row: r, scale,
+          tileW: tw, tileH: th,
+        })
+      }
+    }
+  }
+
+  // Remaining single tiles
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (grid[r][c] === 'building' && !placed[r][c]) grid[r][c] = 'concrete'
+
+  // ── Street furniture ──
+  // Trees along all roads
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c] !== 'sidewalk') continue
+      if ((c + r) % 6 === 0)
+        objects.push({ sprite: DUMMY, pngKey: rng() > 0.3 ? 'palm_tree' : 'street_tree', col: c, row: r, scale: 1.3 + rng() * 0.4 })
+    }
+
+  // Street lamps
+  for (let c = 4; c < cols - 4; c += 10)
+    for (const sr of [ROAD_KEYUAN - 2, ROAD_GAOXIN - 1])
+      if (sr >= 0 && sr < rows && grid[sr]?.[c] === 'sidewalk')
+        objects.push({ sprite: DUMMY, pngKey: 'street_lamp', col: c, row: sr, scale: 1.4 })
+
+  // Traffic lights at major intersections
+  for (const rd of NS_ROADS)
+    for (const ry of [ROAD_KEYUAN, ROAD_GAOXIN])
+      for (const [dr, dc] of [[-2, -2], [2, 2]] as const) {
+        const tr = ry + dr, tc = rd.col + dc
+        if (tr >= 0 && tr < rows && tc >= 0 && tc < cols && grid[tr]?.[tc] === 'sidewalk')
+          objects.push({ sprite: DUMMY, pngKey: 'traffic_light', col: tc, row: tr, scale: 1.5 })
+      }
+
+  // Metro entrances
+  let metroN = 0
+  for (const rd of NS_ROADS) {
+    if (metroN >= 4) break
+    const mr = ROAD_KEYUAN + 3, mc = rd.col + 3
+    if (mr < rows && mc < cols && grid[mr]?.[mc] === 'sidewalk') {
+      objects.push({ sprite: DUMMY, pngKey: 'metro_entrance', col: mc, row: mr, scale: 1.5 })
+      metroN++
+    }
+  }
+
+  // Bus stops along 科苑大道
+  for (let c = 10; c < cols - 10; c += 20 + Math.floor(rng() * 8)) {
+    const br = ROAD_KEYUAN + 3
+    if (br < rows && grid[br]?.[c] === 'sidewalk')
+      objects.push({ sprite: DUMMY, pngKey: 'bus_stop', col: c, row: br, scale: 1.5 })
+  }
+
+  return { cols, rows, tilemap: grid, objects, roadLabels, landmarkLabels }
+}

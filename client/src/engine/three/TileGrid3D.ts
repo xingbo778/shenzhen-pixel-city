@@ -280,9 +280,12 @@ export function buildTileGrid3D(tilemap: TileType[][]): TileGrid3DHandle {
   function dispose() {
     allMeshes.forEach(m => {
       m.dispose()
-      ;(m.material as THREE.Material).dispose()
+      const mat = m.material as THREE.MeshLambertMaterial
+      if (mat.map) mat.map.dispose()
+      mat.dispose()
     })
     geom.dispose()
+    TEX_CACHE.clear()
   }
 
   return { group, dispose }

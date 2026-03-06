@@ -130,9 +130,11 @@ const TECH_MAP: TileType[][] = [
 ]
 
 // ─── 福田CBD: procedurally generated large city ──────────────────────────
-import { generateCity } from './proceduralCity'
+import { generateCity, generateVillage, generateTechPark } from './proceduralCity'
 import type { RoadLabel, LandmarkLabel } from './proceduralCity'
 const CBD_GENERATED = generateCity(160, 100, 42)
+const VILLAGE_GENERATED = generateVillage(120, 80, 77)
+const TECH_GENERATED = generateTechPark(120, 80, 123)
 
 const HUAQIANG_MAP: TileType[][] = [
   [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
@@ -736,158 +738,28 @@ export interface SceneConfig {
 export const SCENE_CONFIGS: Record<string, SceneConfig> = {
   '宝安城中村': {
     name: '宝安城中村',
-    cols: 36, rows: 24,
-    tilemap: VILLAGE_MAP,
+    cols: VILLAGE_GENERATED.cols,
+    rows: VILLAGE_GENERATED.rows,
+    tilemap: VILLAGE_GENERATED.tilemap,
     ambientColor: '#FF9F43',
     lightColor: '#FFAA55',
-    walkableRowStart: 14,
-    objects: [
-      // 第一排握手楼（row 0）- 5栋，每7列一栋
-      { sprite: VILLAGE_BUILDING, col: 0, row: 0 },
-      { sprite: VILLAGE_BUILDING, col: 7, row: 0 },
-      { sprite: VILLAGE_BUILDING, col: 14, row: 0 },
-      { sprite: VILLAGE_BUILDING, col: 21, row: 0 },
-      { sprite: VILLAGE_BUILDING, col: 28, row: 0 },
-      // 第二排握手楼（row 8）- 4栋，错开排列
-      { sprite: VILLAGE_BUILDING, col: 3, row: 8 },
-      { sprite: VILLAGE_BUILDING, col: 10, row: 8 },
-      { sprite: VILLAGE_BUILDING, col: 17, row: 8 },
-      { sprite: VILLAGE_BUILDING, col: 24, row: 8 },
-      // 小巷树木（row 6）
-      { sprite: STREET_TREE, col: 1, row: 6 },
-      { sprite: STREET_TREE, col: 5, row: 6 },
-      { sprite: STREET_TREE, col: 12, row: 6 },
-      { sprite: STREET_TREE, col: 19, row: 6 },
-      { sprite: STREET_TREE, col: 26, row: 6 },
-      { sprite: STREET_TREE, col: 33, row: 6 },
-      // 灌木丛（建筑前绿化）
-      { sprite: BUSH_CLUSTER, col: 0, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 4, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 8, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 13, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 17, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 21, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 25, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 29, row: 12 },
-      { sprite: BUSH_CLUSTER, col: 33, row: 12 },
-      // 行道树（沿人行道密集排列）
-      { sprite: STREET_TREE, col: 0, row: 13 },
-      { sprite: STREET_TREE, col: 3, row: 13 },
-      { sprite: STREET_TREE, col: 6, row: 13 },
-      { sprite: STREET_TREE, col: 9, row: 13 },
-      { sprite: STREET_TREE, col: 12, row: 13 },
-      { sprite: STREET_TREE, col: 15, row: 13 },
-      { sprite: STREET_TREE, col: 18, row: 13 },
-      { sprite: STREET_TREE, col: 21, row: 13 },
-      { sprite: STREET_TREE, col: 24, row: 13 },
-      { sprite: STREET_TREE, col: 27, row: 13 },
-      { sprite: STREET_TREE, col: 30, row: 13 },
-      { sprite: STREET_TREE, col: 33, row: 13 },
-      // 对面行道树
-      { sprite: STREET_TREE, col: 1, row: 20 },
-      { sprite: STREET_TREE, col: 5, row: 20 },
-      { sprite: STREET_TREE, col: 9, row: 20 },
-      { sprite: STREET_TREE, col: 13, row: 20 },
-      { sprite: STREET_TREE, col: 17, row: 20 },
-      { sprite: STREET_TREE, col: 21, row: 20 },
-      { sprite: STREET_TREE, col: 25, row: 20 },
-      { sprite: STREET_TREE, col: 29, row: 20 },
-      { sprite: STREET_TREE, col: 33, row: 20 },
-      // 路灯
-      { sprite: STREET_LAMP, col: 4, row: 14 },
-      { sprite: STREET_LAMP, col: 12, row: 14 },
-      { sprite: STREET_LAMP, col: 20, row: 14 },
-      { sprite: STREET_LAMP, col: 28, row: 14 },
-      // 便利店
-      { sprite: CONVENIENCE_STORE, col: 5, row: 15 },
-      { sprite: CONVENIENCE_STORE, col: 18, row: 15 },
-      { sprite: CONVENIENCE_STORE, col: 30, row: 15 },
-      // 停放车辆（多排）
-      { sprite: PARKED_CAR_WHITE, col: 1, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 9, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 17, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 25, row: 16 },
-      { sprite: PARKED_CAR_WHITE, col: 33, row: 16 },
-      { sprite: PARKED_CAR_DARK, col: 5, row: 17 },
-      { sprite: PARKED_CAR_DARK, col: 13, row: 17 },
-      { sprite: PARKED_CAR_DARK, col: 21, row: 17 },
-      { sprite: PARKED_CAR_DARK, col: 29, row: 17 },
-      // 垃圾桶
-      { sprite: TRASH_BIN, col: 7, row: 14 },
-      { sprite: TRASH_BIN, col: 15, row: 14 },
-      { sprite: TRASH_BIN, col: 23, row: 14 },
-      { sprite: TRASH_BIN, col: 31, row: 14 },
-    ],
+    walkableRowStart: 0,
+    objects: VILLAGE_GENERATED.objects,
+    roadLabels: VILLAGE_GENERATED.roadLabels,
+    landmarkLabels: VILLAGE_GENERATED.landmarkLabels,
   },
 
   '南山科技园': {
     name: '南山科技园',
-    cols: 36, rows: 24,
-    tilemap: TECH_MAP,
+    cols: TECH_GENERATED.cols,
+    rows: TECH_GENERATED.rows,
+    tilemap: TECH_GENERATED.tilemap,
     ambientColor: '#4D96FF',
     lightColor: '#88BBFF',
-    walkableRowStart: 12,
-    objects: [
-      // 第一排写字楼（row 0）- 4栋
-      { sprite: OFFICE_TOWER, col: 0, row: 0 },
-      { sprite: OFFICE_TOWER, col: 9, row: 0 },
-      { sprite: OFFICE_TOWER, col: 18, row: 0 },
-      { sprite: OFFICE_TOWER, col: 27, row: 0 },
-      // 广场大树（row 8）
-      { sprite: PARK_TREE, col: 0, row: 8 },
-      { sprite: PARK_TREE, col: 4, row: 8 },
-      { sprite: PARK_TREE, col: 8, row: 8 },
-      { sprite: PARK_TREE, col: 12, row: 8 },
-      { sprite: PARK_TREE, col: 16, row: 8 },
-      { sprite: PARK_TREE, col: 20, row: 8 },
-      { sprite: PARK_TREE, col: 24, row: 8 },
-      { sprite: PARK_TREE, col: 28, row: 8 },
-      { sprite: PARK_TREE, col: 32, row: 8 },
-      // 广场灌木（row 9）
-      { sprite: BUSH_CLUSTER, col: 2, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 8, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 14, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 20, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 26, row: 9 },
-      { sprite: BUSH_CLUSTER, col: 32, row: 9 },
-      // 人行道行道树（双排）
-      { sprite: STREET_TREE, col: 0, row: 10 },
-      { sprite: STREET_TREE, col: 4, row: 10 },
-      { sprite: STREET_TREE, col: 8, row: 10 },
-      { sprite: STREET_TREE, col: 12, row: 10 },
-      { sprite: STREET_TREE, col: 16, row: 10 },
-      { sprite: STREET_TREE, col: 20, row: 10 },
-      { sprite: STREET_TREE, col: 24, row: 10 },
-      { sprite: STREET_TREE, col: 28, row: 10 },
-      { sprite: STREET_TREE, col: 32, row: 10 },
-      { sprite: STREET_TREE, col: 2, row: 11 },
-      { sprite: STREET_TREE, col: 6, row: 11 },
-      { sprite: STREET_TREE, col: 10, row: 11 },
-      { sprite: STREET_TREE, col: 14, row: 11 },
-      { sprite: STREET_TREE, col: 18, row: 11 },
-      { sprite: STREET_TREE, col: 22, row: 11 },
-      { sprite: STREET_TREE, col: 26, row: 11 },
-      { sprite: STREET_TREE, col: 30, row: 11 },
-      { sprite: STREET_TREE, col: 34, row: 11 },
-      // 地铁站
-      { sprite: METRO_ENTRANCE, col: 5, row: 17 },
-      { sprite: METRO_ENTRANCE, col: 22, row: 17 },
-      // 路灯
-      { sprite: STREET_LAMP, col: 3, row: 12 },
-      { sprite: STREET_LAMP, col: 11, row: 12 },
-      { sprite: STREET_LAMP, col: 19, row: 12 },
-      { sprite: STREET_LAMP, col: 27, row: 12 },
-      // 停放车辆（多排）
-      { sprite: PARKED_CAR_WHITE, col: 0, row: 14 },
-      { sprite: PARKED_CAR_WHITE, col: 8, row: 14 },
-      { sprite: PARKED_CAR_WHITE, col: 16, row: 14 },
-      { sprite: PARKED_CAR_WHITE, col: 24, row: 14 },
-      { sprite: PARKED_CAR_WHITE, col: 32, row: 14 },
-      { sprite: PARKED_CAR_DARK, col: 4, row: 15 },
-      { sprite: PARKED_CAR_DARK, col: 12, row: 15 },
-      { sprite: PARKED_CAR_DARK, col: 20, row: 15 },
-      { sprite: PARKED_CAR_DARK, col: 28, row: 15 },
-    ],
+    walkableRowStart: 0,
+    objects: TECH_GENERATED.objects,
+    roadLabels: TECH_GENERATED.roadLabels,
+    landmarkLabels: TECH_GENERATED.landmarkLabels,
   },
 
   '福田CBD': {
