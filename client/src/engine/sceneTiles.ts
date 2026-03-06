@@ -14,6 +14,12 @@ export type TileType =
   | 'road_h'
   | 'road_v'
   | 'road_cross'
+  | 'road_cross_zebra_n'  // crosswalk on north edge (stripes run E-W)
+  | 'road_cross_zebra_s'  // crosswalk on south edge
+  | 'road_cross_zebra_w'  // crosswalk on west edge (stripes run N-S)
+  | 'road_cross_zebra_e'  // crosswalk on east edge
+  | 'road_stop_h'         // road_h with stop line on right end
+  | 'road_stop_v'         // road_v with stop line on bottom end
   | 'sidewalk'
   | 'sidewalk_edge'
   | 'grass'
@@ -30,7 +36,13 @@ export type TileType =
 export const TILE_COLORS: Record<TileType, { base: string; detail?: string; line?: string; line2?: string }> = {
   road_h:        { base: '#484848', detail: '#525252', line: '#FFCC00', line2: '#FFFFFF' },
   road_v:        { base: '#484848', detail: '#525252', line: '#FFCC00', line2: '#FFFFFF' },
-  road_cross:    { base: '#484848', detail: '#525252', line: '#FFFFFF' },
+  road_cross:    { base: '#4A4A4A', detail: '#525252' },
+  road_cross_zebra_n: { base: '#4A4A4A', detail: '#525252', line: '#FFFFFF' },
+  road_cross_zebra_s: { base: '#4A4A4A', detail: '#525252', line: '#FFFFFF' },
+  road_cross_zebra_w: { base: '#4A4A4A', detail: '#525252', line: '#FFFFFF' },
+  road_cross_zebra_e: { base: '#4A4A4A', detail: '#525252', line: '#FFFFFF' },
+  road_stop_h:   { base: '#484848', detail: '#525252', line: '#FFCC00', line2: '#FFFFFF' },
+  road_stop_v:   { base: '#484848', detail: '#525252', line: '#FFCC00', line2: '#FFFFFF' },
   sidewalk:      { base: '#A09080', detail: '#B0A090', line: '#888070' },
   sidewalk_edge: { base: '#888070', detail: '#706858', line: '#C0B0A0' },
   grass:         { base: '#3A6A28', detail: '#4A7A34', line: '#2E5420' },
@@ -119,7 +131,8 @@ const TECH_MAP: TileType[][] = [
 
 // ─── 福田CBD: procedurally generated large city ──────────────────────────
 import { generateCity } from './proceduralCity'
-const CBD_GENERATED = generateCity(150, 100, 42)
+import type { RoadLabel, LandmarkLabel } from './proceduralCity'
+const CBD_GENERATED = generateCity(160, 100, 42)
 
 const HUAQIANG_MAP: TileType[][] = [
   [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
@@ -716,6 +729,8 @@ export interface SceneConfig {
   ambientColor: string
   lightColor: string
   walkableRowStart: number
+  roadLabels?: RoadLabel[]
+  landmarkLabels?: LandmarkLabel[]
 }
 
 export const SCENE_CONFIGS: Record<string, SceneConfig> = {
@@ -884,6 +899,8 @@ export const SCENE_CONFIGS: Record<string, SceneConfig> = {
     lightColor:   '#DD99FF',
     walkableRowStart: 0,
     objects: CBD_GENERATED.objects,
+    roadLabels: CBD_GENERATED.roadLabels,
+    landmarkLabels: CBD_GENERATED.landmarkLabels,
   },
 
   '华强北': {

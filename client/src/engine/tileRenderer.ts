@@ -25,6 +25,8 @@ const TILE_ORDER: TileType[] = [
   'road_h', 'road_v', 'road_cross', 'sidewalk', 'sidewalk_edge',
   'grass', 'grass_lush', 'water', 'water_edge', 'concrete',
   'tile_plaza', 'building', 'park_path', 'fence_green', 'alley',
+  'road_cross_zebra_n', 'road_cross_zebra_s', 'road_cross_zebra_w', 'road_cross_zebra_e',
+  'road_stop_h', 'road_stop_v',
 ]
 const TILE_SHEET_INDEX: Partial<Record<TileType, number>> = Object.fromEntries(
   TILE_ORDER.map((t, i) => [t, i]),
@@ -38,7 +40,11 @@ const ANIMATED_TILES = new Set<TileType>(['water', 'water_edge'])
  * - Road tiles: need per-tile col/row noise for surface variation & patching.
  * - Building tile: needs per-tile variation so the zone doesn't look like a uniform void.
  */
-const PROCEDURAL_TILES = new Set<TileType>(['road_h', 'road_v', 'road_cross', 'building'])
+const PROCEDURAL_TILES = new Set<TileType>([
+  'road_h', 'road_v', 'road_cross', 'building',
+  'road_cross_zebra_n', 'road_cross_zebra_s', 'road_cross_zebra_w', 'road_cross_zebra_e',
+  'road_stop_h', 'road_stop_v',
+])
 
 // Seeded pseudo-random for deterministic noise per tile
 function tileHash(col: number, row: number): number {
@@ -130,21 +136,63 @@ function drawTile(
     }
 
     case 'road_cross': {
-      // Intersection asphalt — slightly different tone from plain road
+      // Intersection center — clean asphalt, no markings
       const ic = ((tileHash(col * 13, row * 11) * 6) | 0) - 3
-      ctx.fillStyle = `rgb(${62+ic},${62+ic},${66+ic})`
+      ctx.fillStyle = `rgb(${66+ic},${66+ic},${68+ic})`
       ctx.fillRect(x, y, s, s)
-      // Zebra crossing in each direction
-      ctx.fillStyle = c.line!
-      const stripeW = s * 0.08, stripeGap = s * 0.06
-      for (let dx = s * 0.1; dx < s * 0.9; dx += stripeW + stripeGap) {
-        ctx.fillRect(x + dx, y + 1, stripeW, s * 0.12)
-        ctx.fillRect(x + dx, y + s - s * 0.12 - 1, stripeW, s * 0.12)
+      break
+    }
+
+    case 'road_cross_zebra_n':
+    case 'road_cross_zebra_s':
+    case 'road_cross_zebra_w':
+    case 'road_cross_zebra_e': {
+      const zc = ((tileHash(col * 13, row * 11) * 4) | 0) - 2
+      ctx.fillStyle = `rgb(${66+zc},${66+zc},${68+zc})`
+      ctx.fillRect(x, y, s, s)
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      const sw = Math.max(2, s * 0.08)
+      const sg = Math.max(1, s * 0.06)
+      if (type === 'road_cross_zebra_n') {
+        for (let dx = s * 0.08; dx < s * 0.92; dx += sw + sg)
+          ctx.fillRect(x + dx, y, sw, s * 0.2)
+      } else if (type === 'road_cross_zebra_s') {
+        for (let dx = s * 0.08; dx < s * 0.92; dx += sw + sg)
+          ctx.fillRect(x + dx, y + s * 0.8, sw, s * 0.2)
+      } else if (type === 'road_cross_zebra_w') {
+        for (let dy = s * 0.08; dy < s * 0.92; dy += sw + sg)
+          ctx.fillRect(x, y + dy, s * 0.2, sw)
+      } else {
+        for (let dy = s * 0.08; dy < s * 0.92; dy += sw + sg)
+          ctx.fillRect(x + s * 0.8, y + dy, s * 0.2, sw)
       }
-      for (let dy = s * 0.1; dy < s * 0.9; dy += stripeW + stripeGap) {
-        ctx.fillRect(x + 1, y + dy, s * 0.12, stripeW)
-        ctx.fillRect(x + s - s * 0.12 - 1, y + dy, s * 0.12, stripeW)
-      }
+      break
+    }
+
+    case 'road_stop_h': {
+      // road_h with a white stop line on the right edge
+      const shc = ((tileHash(col, row) * 8) | 0) - 4
+      ctx.fillStyle = `rgb(${68+shc},${68+shc},${70+shc})`
+      ctx.fillRect(x, y, s, s)
+      // Yellow center line
+      ctx.fillStyle = '#FFCC00'
+      ctx.fillRect(x, y + s * 0.47, s, 1)
+      ctx.fillRect(x, y + s * 0.53, s, 1)
+      // Stop line (white, solid, on right edge)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(x + s - 2, y + 2, 2, s - 4)
+      break
+    }
+
+    case 'road_stop_v': {
+      const svc = ((tileHash(col, row) * 8) | 0) - 4
+      ctx.fillStyle = `rgb(${68+svc},${68+svc},${70+svc})`
+      ctx.fillRect(x, y, s, s)
+      ctx.fillStyle = '#FFCC00'
+      ctx.fillRect(x + s * 0.47, y, 1, s)
+      ctx.fillRect(x + s * 0.53, y, 1, s)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(x + 2, y + s - 2, s - 4, 2)
       break
     }
 

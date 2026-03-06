@@ -65,14 +65,21 @@ export const SCENE_VEHICLE_LANES: Record<string, VehicleLane[]> = {
     { type: 'sweeper',     y: 0.88, xMin: 0.05, xMax: 0.95, dir: -1 },
   ],
   '福田CBD': [
-    { type: 'taxi',        y: 0.55, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'taxi',        y: 0.60, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'huolala',     y: 0.65, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'taxi',        y: 0.70, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bus',         y: 0.75, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'meituan',     y: 0.55, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'shared_bike', y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'sweeper',     y: 0.82, xMin: 0.05, xMax: 0.95, dir:  1 },
+    // 红荔路 (~row 12%)
+    { type: 'taxi',        y: 0.12, xMin: 0.05, xMax: 0.95, dir:  1 },
+    { type: 'shared_bike', y: 0.13, xMin: 0.05, xMax: 0.95, dir: -1 },
+    // 福华路 (~row 38%)
+    { type: 'taxi',        y: 0.37, xMin: 0.05, xMax: 0.95, dir:  1 },
+    { type: 'bus',         y: 0.39, xMin: 0.05, xMax: 0.95, dir: -1 },
+    // 深南大道 (~row 58%, widest road)
+    { type: 'taxi',        y: 0.56, xMin: 0.05, xMax: 0.95, dir:  1 },
+    { type: 'taxi',        y: 0.57, xMin: 0.05, xMax: 0.95, dir:  1 },
+    { type: 'bus',         y: 0.59, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'huolala',     y: 0.60, xMin: 0.05, xMax: 0.95, dir: -1 },
+    // 滨河大道 (~row 82%)
+    { type: 'taxi',        y: 0.81, xMin: 0.05, xMax: 0.95, dir:  1 },
+    { type: 'meituan',     y: 0.83, xMin: 0.05, xMax: 0.95, dir: -1 },
+    { type: 'sweeper',     y: 0.84, xMin: 0.05, xMax: 0.95, dir:  1 },
   ],
   '华强北': [
     { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir:  1 },

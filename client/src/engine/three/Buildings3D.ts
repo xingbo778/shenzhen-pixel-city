@@ -4,6 +4,9 @@
  * Each building occupies a specific number of tiles (tileW × tileH).
  * The box width/depth matches the footprint exactly (with a small margin).
  * `scale` only affects height, never the footprint.
+ *
+ * Landmark buildings (市民中心, 平安金融中心, 会展中心, etc.) get unique
+ * procedural geometry instead of generic boxes.
  */
 
 import * as THREE from 'three'
@@ -16,25 +19,49 @@ const MODEL_META: Record<string, { h: number; color: string }> = {
   office_tower:       { h: 6.0, color: '#4488BB' },
   office_tower_v1:    { h: 5.5, color: '#44AA88' },
   office_tower_v2:    { h: 7.0, color: '#8899BB' },
+  office_tower_v3:    { h: 6.5, color: '#5599CC' },
+  office_tower_v4:    { h: 5.8, color: '#445566' },
+  office_tower_v5:    { h: 7.5, color: '#6699CC' },
   cbd_building:       { h: 4.5, color: '#336699' },
   cbd_building_v1:    { h: 4.0, color: '#667788' },
   cbd_building_v2:    { h: 5.0, color: '#AA9955' },
+  cbd_building_v3:    { h: 4.2, color: '#778899' },
+  cbd_building_v4:    { h: 5.5, color: '#BBAA88' },
+  cbd_building_v5:    { h: 4.8, color: '#DDDDDD' },
   apartment_block:    { h: 3.0, color: '#AA9977' },
   apartment_block_v1: { h: 2.6, color: '#88AABB' },
   apartment_block_v2: { h: 2.8, color: '#CC8877' },
+  apartment_block_v3: { h: 3.2, color: '#999999' },
+  apartment_block_v4: { h: 2.5, color: '#CCBB66' },
   shop_building:      { h: 1.5, color: '#CCAA66' },
   shop_building_v1:   { h: 1.3, color: '#CC7744' },
   shop_building_v2:   { h: 1.4, color: '#EEEEEE' },
+  shop_building_v3:   { h: 1.6, color: '#889999' },
   village_building:   { h: 2.5, color: '#888877' },
   village_building_v1:{ h: 2.2, color: '#AA7744' },
   village_building_v2:{ h: 2.3, color: '#668866' },
+  village_building_v3:{ h: 2.4, color: '#777766' },
   palm_tree:          { h: 2.0, color: '#226611' },
   street_tree:        { h: 1.5, color: '#336622' },
   metro_entrance:     { h: 0.8, color: '#114499' },
   fountain:           { h: 0.5, color: '#4488CC' },
+  // Landmarks
+  landmark_civic:     { h: 4.0, color: '#CCDDEE' },
+  landmark_pingan:    { h: 18.0, color: '#88AACC' },
+  landmark_expo:      { h: 3.0, color: '#BBCCDD' },
+  landmark_kk100:     { h: 14.0, color: '#6688AA' },
 }
 
 const DEFAULT_META = { h: 2.0, color: '#666677' }
+
+// ── Landmark keys ────────────────────────────────────────────────────
+const LANDMARK_KEYS = new Set([
+  'landmark_civic', 'landmark_pingan', 'landmark_expo', 'landmark_kk100',
+])
+
+function isLandmarkKey(key: string): boolean {
+  return LANDMARK_KEYS.has(key)
+}
 
 // ── Texture loading ──────────────────────────────────────────────────
 const texLoader = new THREE.TextureLoader()
@@ -63,6 +90,173 @@ let _seed = 1
 function sr(): number {
   _seed = (_seed * 16807 + 0) % 2147483647
   return (_seed - 1) / 2147483646
+}
+
+// ── Landmark geometry builders ───────────────────────────────────────
+
+function buildLandmarkCivic(width: number, depth: number): THREE.Object3D {
+  // 市民中心 — low curved roof with wings, like a giant bird
+  const obj = new THREE.Object3D()
+  const bodyH = 2.5
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xDDEEFF })
+  const glassMat = new THREE.MeshLambertMaterial({ color: 0x88BBDD, transparent: true, opacity: 0.6 })
+
+  // Central dome
+  const domeR = Math.min(width, depth) * 0.3
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(domeR, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+    glassMat,
+  )
+  dome.position.y = bodyH
+  obj.add(dome)
+
+  // Main body — wide flat box
+  const body = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, depth), bodyMat)
+  body.position.y = bodyH / 2
+  obj.add(body)
+
+  // Wing extensions
+  const wingW = width * 0.15, wingH = bodyH * 0.6, wingD = depth * 1.1
+  const wingMat = new THREE.MeshLambertMaterial({ color: 0xCCDDEE })
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(wingW, wingH, wingD), wingMat)
+    wing.position.set(side * (width / 2 + wingW / 2), wingH / 2, 0)
+    obj.add(wing)
+  }
+
+  // Roof overhang
+  const roofGeo = new THREE.BoxGeometry(width * 1.15, 0.15, depth * 1.15)
+  const roof = new THREE.Mesh(roofGeo, new THREE.MeshLambertMaterial({ color: 0xEEEEEE }))
+  roof.position.y = bodyH
+  obj.add(roof)
+
+  return obj
+}
+
+function buildLandmarkPingan(width: number, depth: number): THREE.Object3D {
+  // 平安金融中心 — tallest building in Shenzhen, tapered tower with spire
+  const obj = new THREE.Object3D()
+  const totalH = 18
+
+  // Main tower — tapered
+  const towerGeo = new THREE.CylinderGeometry(
+    Math.min(width, depth) * 0.25,  // top radius (narrower)
+    Math.min(width, depth) * 0.4,   // bottom radius
+    totalH * 0.85,
+    8,
+  )
+  const towerMat = new THREE.MeshLambertMaterial({ color: 0x88AACC })
+  const tower = new THREE.Mesh(towerGeo, towerMat)
+  tower.position.y = totalH * 0.85 / 2
+  obj.add(tower)
+
+  // Glass curtain wall effect — slightly larger transparent shell
+  const glassMat = new THREE.MeshLambertMaterial({
+    color: 0xAADDFF, transparent: true, opacity: 0.3,
+  })
+  const glassGeo = new THREE.CylinderGeometry(
+    Math.min(width, depth) * 0.26,
+    Math.min(width, depth) * 0.41,
+    totalH * 0.85,
+    8,
+  )
+  const glass = new THREE.Mesh(glassGeo, glassMat)
+  glass.position.y = totalH * 0.85 / 2
+  obj.add(glass)
+
+  // Spire
+  const spireH = totalH * 0.15
+  const spireGeo = new THREE.ConeGeometry(0.15, spireH, 4)
+  const spireMat = new THREE.MeshLambertMaterial({ color: 0xCCCCCC })
+  const spire = new THREE.Mesh(spireGeo, spireMat)
+  spire.position.y = totalH * 0.85 + spireH / 2
+  obj.add(spire)
+
+  // Base podium
+  const podiumH = 1.5
+  const podium = new THREE.Mesh(
+    new THREE.BoxGeometry(width * 0.9, podiumH, depth * 0.9),
+    new THREE.MeshLambertMaterial({ color: 0x667788 }),
+  )
+  podium.position.y = podiumH / 2
+  obj.add(podium)
+
+  return obj
+}
+
+function buildLandmarkExpo(width: number, depth: number): THREE.Object3D {
+  // 会展中心 — long, low, wavy-roofed exhibition hall
+  const obj = new THREE.Object3D()
+  const bodyH = 2.5
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xBBCCDD })
+
+  // Main body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, depth), bodyMat)
+  body.position.y = bodyH / 2
+  obj.add(body)
+
+  // Wavy roof segments
+  const segments = 5
+  const segW = width / segments
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xEEEEFF })
+  for (let i = 0; i < segments; i++) {
+    const archGeo = new THREE.CylinderGeometry(segW * 0.4, segW * 0.4, depth * 0.95, 8, 1, false, 0, Math.PI)
+    const arch = new THREE.Mesh(archGeo, roofMat)
+    arch.rotation.z = Math.PI / 2
+    arch.rotation.y = Math.PI / 2
+    arch.position.set(-width / 2 + segW * (i + 0.5), bodyH + segW * 0.15, 0)
+    obj.add(arch)
+  }
+
+  // Glass entrance
+  const entranceMat = new THREE.MeshLambertMaterial({ color: 0x88BBDD, transparent: true, opacity: 0.5 })
+  const entrance = new THREE.Mesh(new THREE.BoxGeometry(width * 0.3, bodyH * 0.8, 0.3), entranceMat)
+  entrance.position.set(0, bodyH * 0.4, depth / 2 + 0.15)
+  obj.add(entrance)
+
+  return obj
+}
+
+function buildLandmarkKK100(width: number, depth: number): THREE.Object3D {
+  // 京基100 — second tallest, rectangular tapered tower
+  const obj = new THREE.Object3D()
+  const totalH = 14
+
+  // Main tower — box that tapers
+  const sections = 4
+  const sectionH = totalH / sections
+  for (let i = 0; i < sections; i++) {
+    const taper = 1 - i * 0.08
+    const sW = width * 0.7 * taper
+    const sD = depth * 0.7 * taper
+    const mat = new THREE.MeshLambertMaterial({
+      color: new THREE.Color(0x6688AA).lerp(new THREE.Color(0x88AACC), i / sections),
+    })
+    const section = new THREE.Mesh(new THREE.BoxGeometry(sW, sectionH, sD), mat)
+    section.position.y = sectionH * i + sectionH / 2
+    obj.add(section)
+  }
+
+  // Crown
+  const crownH = 1.0
+  const crown = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.2, width * 0.15, crownH, 6),
+    new THREE.MeshLambertMaterial({ color: 0xCCCCCC }),
+  )
+  crown.position.y = totalH + crownH / 2
+  obj.add(crown)
+
+  return obj
+}
+
+function buildLandmark(key: string, width: number, depth: number): THREE.Object3D | null {
+  switch (key) {
+    case 'landmark_civic':  return buildLandmarkCivic(width, depth)
+    case 'landmark_pingan': return buildLandmarkPingan(width, depth)
+    case 'landmark_expo':   return buildLandmarkExpo(width, depth)
+    case 'landmark_kk100':  return buildLandmarkKK100(width, depth)
+    default: return null
+  }
 }
 
 // ── Build a single building sized to its tile footprint ──────────────
@@ -161,11 +355,21 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
     const tileW = obj.tileW ?? 2
     const tileH = obj.tileH ?? 2
 
-    // Position: top-left corner of the cluster + half the footprint
     const posX = (obj.col + tileW / 2) * TILE_SIZE
     const posZ = (obj.row + tileH / 2) * TILE_SIZE
 
-    const instance = buildTexturedBox(key, heightScale, tileW, tileH)
+    let instance: THREE.Object3D
+
+    if (isLandmarkKey(key)) {
+      const width = tileW * TILE_SIZE - MARGIN * 2
+      const depth = tileH * TILE_SIZE - MARGIN * 2
+      const lm = buildLandmark(key, width, depth)
+      if (!lm) return
+      instance = lm
+    } else {
+      instance = buildTexturedBox(key, heightScale, tileW, tileH)
+    }
+
     instance.position.x = posX
     instance.position.z = posZ
     group.add(instance)

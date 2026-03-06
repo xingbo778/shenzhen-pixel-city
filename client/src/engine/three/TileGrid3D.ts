@@ -42,42 +42,138 @@ function paintTileCanvas(type: TileType): HTMLCanvasElement {
     ctx.lineWidth   = 0.5
 
     if (type === 'road_h') {
-      // Centre dashed yellow line
-      ctx.strokeStyle = col.line
-      ctx.setLineDash([4, 4])
+      // Asphalt texture variation
+      ctx.fillStyle = '#505050'
+      for (let i = 0; i < 30; i++) {
+        ctx.fillRect(Math.random() * S, Math.random() * S, 2 + Math.random() * 3, 1)
+      }
+      // Double yellow center line (Shenzhen-style)
+      ctx.strokeStyle = '#FFCC00'
+      ctx.lineWidth = 1.0
       ctx.beginPath()
-      ctx.moveTo(0,  S / 2); ctx.lineTo(S, S / 2)
+      ctx.moveTo(0, S / 2 - 1.5); ctx.lineTo(S, S / 2 - 1.5)
+      ctx.moveTo(0, S / 2 + 1.5); ctx.lineTo(S, S / 2 + 1.5)
+      ctx.stroke()
+      // White dashed lane lines
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 0.6
+      ctx.setLineDash([6, 8])
+      ctx.beginPath()
+      ctx.moveTo(0, S * 0.25); ctx.lineTo(S, S * 0.25)
+      ctx.moveTo(0, S * 0.75); ctx.lineTo(S, S * 0.75)
       ctx.stroke()
       ctx.setLineDash([])
-      // White edge lines
-      ctx.strokeStyle = col.line2 ?? '#ffffff'
-      ctx.lineWidth   = 0.75
+      // Solid white edge lines
+      ctx.lineWidth = 0.8
       ctx.beginPath()
-      ctx.moveTo(0, 3);     ctx.lineTo(S, 3)
-      ctx.moveTo(0, S - 3); ctx.lineTo(S, S - 3)
+      ctx.moveTo(0, 2); ctx.lineTo(S, 2)
+      ctx.moveTo(0, S - 2); ctx.lineTo(S, S - 2)
       ctx.stroke()
     } else if (type === 'road_v') {
-      ctx.strokeStyle = col.line
-      ctx.setLineDash([4, 4])
+      ctx.fillStyle = '#505050'
+      for (let i = 0; i < 30; i++) {
+        ctx.fillRect(Math.random() * S, Math.random() * S, 1, 2 + Math.random() * 3)
+      }
+      ctx.strokeStyle = '#FFCC00'
+      ctx.lineWidth = 1.0
       ctx.beginPath()
-      ctx.moveTo(S / 2, 0); ctx.lineTo(S / 2, S)
+      ctx.moveTo(S / 2 - 1.5, 0); ctx.lineTo(S / 2 - 1.5, S)
+      ctx.moveTo(S / 2 + 1.5, 0); ctx.lineTo(S / 2 + 1.5, S)
+      ctx.stroke()
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 0.6
+      ctx.setLineDash([6, 8])
+      ctx.beginPath()
+      ctx.moveTo(S * 0.25, 0); ctx.lineTo(S * 0.25, S)
+      ctx.moveTo(S * 0.75, 0); ctx.lineTo(S * 0.75, S)
       ctx.stroke()
       ctx.setLineDash([])
-      ctx.strokeStyle = col.line2 ?? '#ffffff'
-      ctx.lineWidth   = 0.75
+      ctx.lineWidth = 0.8
       ctx.beginPath()
-      ctx.moveTo(3, 0);     ctx.lineTo(3, S)
-      ctx.moveTo(S - 3, 0); ctx.lineTo(S - 3, S)
+      ctx.moveTo(2, 0); ctx.lineTo(2, S)
+      ctx.moveTo(S - 2, 0); ctx.lineTo(S - 2, S)
       ctx.stroke()
     } else if (type === 'road_cross') {
-      ctx.strokeStyle = col.line
-      ctx.lineWidth   = 0.75
-      ctx.setLineDash([3, 5])
+      // Intersection center — clean asphalt, no markings
+      ctx.fillStyle = '#505050'
+      for (let i = 0; i < 15; i++) {
+        ctx.fillRect(Math.random() * S, Math.random() * S, 2, 2)
+      }
+    } else if (type === 'road_cross_zebra_n' || type === 'road_cross_zebra_s'
+      || type === 'road_cross_zebra_w' || type === 'road_cross_zebra_e') {
+      // Crosswalk zebra stripes at intersection edge
+      ctx.fillStyle = '#505050'
+      for (let i = 0; i < 10; i++) {
+        ctx.fillRect(Math.random() * S, Math.random() * S, 2, 2)
+      }
+      const sw = 3, sg = 4  // stripe width, gap
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'
+      if (type === 'road_cross_zebra_n') {
+        // Stripes along top edge (pedestrians cross N-S)
+        for (let x = 3; x < S - 3; x += sw + sg)
+          ctx.fillRect(x, 1, sw, S * 0.3)
+      } else if (type === 'road_cross_zebra_s') {
+        for (let x = 3; x < S - 3; x += sw + sg)
+          ctx.fillRect(x, S * 0.7, sw, S * 0.3 - 1)
+      } else if (type === 'road_cross_zebra_w') {
+        for (let y = 3; y < S - 3; y += sw + sg)
+          ctx.fillRect(1, y, S * 0.3, sw)
+      } else {
+        for (let y = 3; y < S - 3; y += sw + sg)
+          ctx.fillRect(S * 0.7, y, S * 0.3 - 1, sw)
+      }
+    } else if (type === 'road_stop_h') {
+      // road_h approaching intersection — has stop line
+      ctx.fillStyle = '#505050'
+      for (let i = 0; i < 20; i++) {
+        ctx.fillRect(Math.random() * S, Math.random() * S, 2 + Math.random() * 3, 1)
+      }
+      // Yellow center line
+      ctx.strokeStyle = '#FFCC00'
+      ctx.lineWidth = 1.0
       ctx.beginPath()
-      ctx.moveTo(0,  S / 2); ctx.lineTo(S, S / 2)
-      ctx.moveTo(S / 2, 0); ctx.lineTo(S / 2, S)
+      ctx.moveTo(0, S / 2 - 1.5); ctx.lineTo(S, S / 2 - 1.5)
+      ctx.moveTo(0, S / 2 + 1.5); ctx.lineTo(S, S / 2 + 1.5)
+      ctx.stroke()
+      // White dashed lane lines
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 0.6
+      ctx.setLineDash([6, 8])
+      ctx.beginPath()
+      ctx.moveTo(0, S * 0.25); ctx.lineTo(S * 0.85, S * 0.25)
+      ctx.moveTo(0, S * 0.75); ctx.lineTo(S * 0.85, S * 0.75)
       ctx.stroke()
       ctx.setLineDash([])
+      // Solid white stop line on right edge
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(S - 2, 2); ctx.lineTo(S - 2, S - 2)
+      ctx.stroke()
+    } else if (type === 'road_stop_v') {
+      ctx.fillStyle = '#505050'
+      for (let i = 0; i < 20; i++) {
+        ctx.fillRect(Math.random() * S, Math.random() * S, 1, 2 + Math.random() * 3)
+      }
+      ctx.strokeStyle = '#FFCC00'
+      ctx.lineWidth = 1.0
+      ctx.beginPath()
+      ctx.moveTo(S / 2 - 1.5, 0); ctx.lineTo(S / 2 - 1.5, S)
+      ctx.moveTo(S / 2 + 1.5, 0); ctx.lineTo(S / 2 + 1.5, S)
+      ctx.stroke()
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 0.6
+      ctx.setLineDash([6, 8])
+      ctx.beginPath()
+      ctx.moveTo(S * 0.25, 0); ctx.lineTo(S * 0.25, S * 0.85)
+      ctx.moveTo(S * 0.75, 0); ctx.lineTo(S * 0.75, S * 0.85)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(2, S - 2); ctx.lineTo(S - 2, S - 2)
+      ctx.stroke()
     } else if (type === 'sidewalk' || type === 'sidewalk_edge') {
       ctx.strokeStyle = col.line
       ctx.lineWidth   = 0.5
