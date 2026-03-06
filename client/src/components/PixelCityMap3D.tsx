@@ -46,6 +46,7 @@ import { buildVehicles3D } from '@/engine/three/Vehicles3D'
 import type { Vehicles3DHandle } from '@/engine/three/Vehicles3D'
 import { TILE_SIZE } from '@/engine/three/ThreeScene'
 import CityPlanView from './CityPlanView'
+import { Button } from '@/components/ui/button'
 
 // ── Constants ──────────────────────────────────────────────────────────
 // Approximate game-loop tile size in CSS pixels (used for entity <-> world mapping)
@@ -402,42 +403,36 @@ export default function PixelCityMap3D({
 
       {/* View mode toggle */}
       <div className="absolute top-3 left-3 flex gap-1">
-        <button
+        <Button
           onClick={() => setViewMode('3d')}
-          className={`px-2 py-0.5 text-xs font-mono border rounded transition-all ${
-            viewMode === '3d'
-              ? 'bg-white/20 border-white/50 text-white'
-              : 'bg-black/50 border-white/15 text-white/40 hover:text-white/80'
-          }`}
+          variant={viewMode === '3d' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-7 px-2.5 text-xs font-mono backdrop-blur-sm"
         >
           3D
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => setViewMode('plan')}
-          className={`px-2 py-0.5 text-xs font-mono border rounded transition-all ${
-            viewMode === 'plan'
-              ? 'bg-white/20 border-white/50 text-white'
-              : 'bg-black/50 border-white/15 text-white/40 hover:text-white/80'
-          }`}
+          variant={viewMode === 'plan' ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-7 px-2.5 text-xs font-mono backdrop-blur-sm"
         >
           俯视图
-        </button>
+        </Button>
       </div>
 
       {/* Location selector */}
       <div
-        className="absolute bottom-3 left-0 right-0 flex gap-1 justify-center overflow-x-auto px-2 pb-0.5"
+        className="absolute bottom-3 left-0 right-0 flex gap-1.5 justify-center overflow-x-auto px-2 pb-0.5"
         style={{ scrollbarWidth: 'none' }}
       >
         {SCENE_NAMES.map(loc => (
-          <button
+          <Button
             key={loc}
             onClick={() => onLocationClick(loc)}
-            className={`px-2 py-0.5 text-xs font-mono border transition-all ${
-              loc === activeLocation
-                ? 'border-opacity-80 text-white'
-                : 'bg-black/50 border-white/15 text-white/50 hover:border-white/40 hover:text-white/80'
-            }`}
+            variant={loc === activeLocation ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-7 px-2.5 text-xs font-mono backdrop-blur-sm"
             style={loc === activeLocation ? {
               background:  meta.ambientColor + '33',
               borderColor: meta.ambientColor + 'AA',
@@ -445,12 +440,12 @@ export default function PixelCityMap3D({
             } : {}}
           >
             {loc}
-          </button>
+          </Button>
         ))}
       </div>
 
       {viewMode === '3d' && (
-        <div className="absolute top-3 right-3 text-xs font-mono text-white/30 bg-black/30 px-2 py-0.5 rounded pointer-events-none">
+        <div className="absolute top-3 right-3 text-xs text-muted-foreground backdrop-blur-sm bg-black/20 px-2.5 py-1 rounded-md pointer-events-none">
           拖拽平移 · 滚轮缩放 · 3D
         </div>
       )}

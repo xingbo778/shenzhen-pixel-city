@@ -1,6 +1,5 @@
 /**
  * Home - 深圳像素城市主页面
- * 设计哲学：城市运营中心（NOC Dashboard）
  * 布局：顶部 Header + 左侧地图(60%) + 右侧面板(40%)
  *       右侧面板：上半 Bot 卡片网格 + 下半 标签页信息面板
  *       点击 Bot 卡片时右侧切换为 Bot 详情
@@ -15,7 +14,10 @@ import BotCard from "@/components/BotCard";
 import BotDetailPanel from "@/components/BotDetailPanel";
 import RightPanel from "@/components/RightPanel";
 import TopHeader from "@/components/TopHeader";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 
 export default function Home() {
   const [engineUrl, setEngineUrlState] = useState(
@@ -31,7 +33,6 @@ export default function Home() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [currentMapLocation, setCurrentMapLocation] = useState<string>('宝安城中村');
   const [showBotDetail, setShowBotDetail] = useState(false);
-  // Two-layer map: 'overview' = city overview, 'scene' = zoomed-in location
   const [mapLayer, setMapLayer] = useState<'overview' | 'scene'>('overview');
   const [zoomAnimating, setZoomAnimating] = useState(false);
 
@@ -46,7 +47,6 @@ export default function Home() {
     setShowBotDetail(false);
   }, []);
 
-  // Handle overview map location click → zoom into scene
   const handleOverviewLocationSelect = useCallback((locationKey: string) => {
     const sceneName = OVERVIEW_TO_SCENE_KEY[locationKey] || '宝安城中村';
     setZoomAnimating(true);
@@ -76,7 +76,7 @@ export default function Home() {
 
   const selectedBot = selectedBotId && world ? world.bots[selectedBotId] : null;
 
-  // Lazy-load Bot cards: only render visible ones via IntersectionObserver
+  // Lazy-load Bot cards
   const [visibleBotIds, setVisibleBotIds] = useState<Set<string>>(new Set());
   const botCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   useEffect(() => {
@@ -98,10 +98,7 @@ export default function Home() {
   }, [aliveBots]);
 
   return (
-    <div
-      className="flex flex-col"
-      style={{ height: "100vh", background: "#060b14", overflow: "hidden" }}
-    >
+    <div className="h-screen bg-background overflow-hidden flex flex-col">
       {/* 顶部 Header */}
       <TopHeader
         world={world}
@@ -114,63 +111,39 @@ export default function Home() {
       {/* 主体区域 */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* 左侧：像素城市地图（两层：全景 ↔ 场景） */}
-        <div
-          className="relative"
-          style={{
-            width: "60%",
-            borderRight: "1px solid rgba(77,150,255,0.12)",
-            overflow: "hidden",
-          }}
-        >
-          {/* 地图标题 + 层级指示 */}
-          <div
-            className="absolute top-2 left-3 z-10 flex items-center gap-2"
-            style={{ pointerEvents: "none" }}
-          >
-            <span className="text-[9px] font-orbitron" style={{ color: "rgba(77,150,255,0.5)" }}>
+        {/* 左侧：像素城市地图 */}
+        <div className="relative w-[60%] border-r border-white/[0.06] overflow-hidden">
+          {/* 地图标题 */}
+          <div className="absolute top-2 left-3 z-10 pointer-events-none">
+            <span className="text-xs text-muted-foreground">
               {mapLayer === 'overview' ? 'PIXEL MAP · SHENZHEN' : `SCENE · ${currentMapLocation.toUpperCase()}`}
             </span>
           </div>
 
-          {/* 场景层：返回全景按钮 */}
+          {/* 返回全景按钮 */}
           {mapLayer === 'scene' && (
-            <button
+            <Button
               onClick={() => setMapLayer('overview')}
-              className="absolute top-2 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded text-[9px] font-orbitron"
-              style={{
-                background: "rgba(77,150,255,0.15)",
-                border: "1px solid rgba(77,150,255,0.35)",
-                color: "#4d96ff",
-                cursor: "pointer",
-              }}
+              variant="outline"
+              size="sm"
+              className="absolute top-2 right-3 z-20 h-7 text-xs backdrop-blur-sm"
             >
-              ← 全城视图
-            </button>
+              <ArrowLeft className="size-3.5" />
+              全城视图
+            </Button>
           )}
 
           {/* 全景提示 */}
           {mapLayer === 'overview' && (
-            <div
-              className="absolute bottom-3 left-1/2 z-10 text-[9px] font-orbitron"
-              style={{ transform: "translateX(-50%)", color: "rgba(77,150,255,0.45)", pointerEvents: "none" }}
-            >
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 text-xs text-muted-foreground pointer-events-none">
               点击地点进入场景
             </div>
           )}
 
           {/* 缩放动画遮罩 */}
           {zoomAnimating && (
-            <div
-              className="absolute inset-0 z-30"
-              style={{
-                background: "rgba(6,11,20,0.85)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <div className="text-[11px] font-orbitron" style={{ color: "#4d96ff" }}>
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/85 backdrop-blur-sm">
+              <div className="text-sm text-primary">
                 进入 {currentMapLocation}...
               </div>
             </div>
@@ -178,14 +151,10 @@ export default function Home() {
 
           {/* 加载状态 */}
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center z-20"
-              style={{ background: "rgba(6,11,20,0.7)" }}>
+            <div className="absolute inset-0 flex items-center justify-center z-20 bg-background/70 backdrop-blur-sm">
               <div className="text-center">
-                <div
-                  className="w-8 h-8 rounded-full border-2 border-t-transparent mx-auto mb-2 animate-spin"
-                  style={{ borderColor: "#4d96ff", borderTopColor: "transparent" }}
-                />
-                <div className="text-[10px] font-orbitron" style={{ color: "#4d96ff" }}>
+                <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent mx-auto mb-2 animate-spin" />
+                <div className="text-xs text-primary">
                   连接 world_engine...
                 </div>
               </div>
@@ -194,17 +163,17 @@ export default function Home() {
 
           {/* 错误提示 */}
           {!isConnected && !isLoading && (
-            <div
-              className="absolute bottom-8 left-3 right-3 z-10 p-2 rounded text-[9px]"
-              style={{ background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.3)", color: "#ff6b6b" }}
-            >
-              ⚠️ 无法连接到 world_engine ({engineUrl})。请确保 world_engine_v8.py 正在运行，或修改上方地址。
-            </div>
+            <Alert variant="destructive" className="absolute bottom-8 left-3 right-3 z-10">
+              <AlertTriangle className="size-4" />
+              <AlertDescription className="text-xs">
+                无法连接到 world_engine ({engineUrl})。请确保 world_engine_v8.py 正在运行，或修改上方地址。
+              </AlertDescription>
+            </Alert>
           )}
 
-          {/* 全景层 - 条件渲染避免 canvas 重叠 */}
+          {/* 全景层 */}
           {mapLayer === 'overview' && (
-            <div style={{ position: "absolute", inset: 0 }}>
+            <div className="absolute inset-0">
               <CityOverviewMap
                 world={world}
                 onLocationSelect={handleOverviewLocationSelect}
@@ -212,9 +181,9 @@ export default function Home() {
             </div>
           )}
 
-          {/* 场景层 - 条件渲染 */}
+          {/* 场景层 */}
           {mapLayer === 'scene' && (
-            <div style={{ position: "absolute", inset: 0 }}>
+            <div className="absolute inset-0">
               <PixelCityMap3D
                 world={world}
                 selectedBotId={selectedBotId}
@@ -227,29 +196,21 @@ export default function Home() {
         </div>
 
         {/* 右侧面板 */}
-        <div className="flex flex-col" style={{ width: "40%", overflow: "hidden" }}>
+        <div className="flex flex-col w-[40%] overflow-hidden">
 
           {/* Bot 状态网格（上半部分） */}
           <div
-            className="shrink-0 overflow-y-auto"
-            style={{
-              height: showBotDetail ? "0" : "45%",
-              borderBottom: "1px solid rgba(77,150,255,0.1)",
-              transition: "height 0.3s ease",
-            }}
+            className="shrink-0 overflow-y-auto border-b border-white/[0.06] transition-[height] duration-300"
+            style={{ height: showBotDetail ? "0" : "45%" }}
           >
-            <div
-              className="px-2 pt-2 pb-1 flex items-center justify-between sticky top-0 z-10"
-              style={{ background: "rgba(6,11,20,0.95)", borderBottom: "1px solid rgba(77,150,255,0.08)" }}
-            >
-              <span className="text-[9px] font-orbitron" style={{ color: "rgba(77,150,255,0.6)" }}>
+            <div className="px-2 pt-2 pb-1 flex items-center justify-between sticky top-0 z-10 glass-panel-solid border-0 border-b border-white/[0.06]">
+              <span className="text-xs text-muted-foreground">
                 BOT STATUS · {aliveBots.length} ACTIVE
               </span>
               {selectedBotId && (
                 <button
                   onClick={() => { setSelectedBotId(null); setShowBotDetail(false); }}
-                  className="text-[8px]"
-                  style={{ color: "rgba(200,216,240,0.3)" }}
+                  className="text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors"
                 >
                   清除选择
                 </button>
@@ -271,29 +232,23 @@ export default function Home() {
                       onClick={() => handleBotClick(botId)}
                     />
                   ) : (
-                    <div
-                      className="w-full h-full rounded"
-                      style={{ background: 'rgba(77,150,255,0.03)', minHeight: 80 }}
-                    />
+                    <div className="w-full h-full rounded-md bg-white/[0.02]" style={{ minHeight: 80 }} />
                   )}
                 </div>
               ))}
               {aliveBots.length === 0 && (
-                <div
-                  className="col-span-2 flex items-center justify-center h-20 text-[10px]"
-                  style={{ color: "rgba(200,216,240,0.25)" }}
-                >
+                <div className="col-span-2 flex items-center justify-center h-20 text-xs text-muted-foreground/40">
                   {isLoading ? "加载中..." : "暂无存活 Bot"}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Bot 详情面板（展开时覆盖上半部分） */}
+          {/* Bot 详情面板 */}
           {showBotDetail && selectedBot && (
             <div
-              className="shrink-0 overflow-hidden"
-              style={{ height: "45%", borderBottom: "1px solid rgba(77,150,255,0.1)" }}
+              className="shrink-0 overflow-hidden border-b border-white/[0.06]"
+              style={{ height: "45%" }}
             >
               <BotDetailPanel
                 botId={selectedBotId}

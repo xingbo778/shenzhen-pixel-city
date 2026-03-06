@@ -1,10 +1,12 @@
 /**
  * BotCard - Bot 状态卡片
- * 设计：城市运营中心风格，紧凑信息密度，情绪颜色编码
+ * 现代 dashboard 风格，玻璃拟态 + ring 选中态
  */
 
-import { BOT_COLORS, BOT_ROLES, getDominantEmotion, getEmotionColor } from "@/types/world";
+import { BOT_COLORS, BOT_ROLES, getDominantEmotion } from "@/types/world";
 import type { BotState } from "@/types/world";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 interface Props {
   botId: string;
@@ -13,133 +15,120 @@ interface Props {
   onClick: () => void;
 }
 
-function StatBar({ value, color, label }: { value: number; color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <span className="text-[8px] font-mono-data w-5 shrink-0" style={{ color: "rgba(200,216,240,0.5)" }}>
-        {label}
-      </span>
-      <div className="flex-1 h-1 rounded-full bg-white/5 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${Math.max(0, Math.min(100, value))}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-[8px] font-mono-data w-5 text-right shrink-0" style={{ color: "rgba(200,216,240,0.5)" }}>
-        {Math.round(value)}
-      </span>
-    </div>
-  );
-}
-
 export default function BotCard({ botId, bot, isSelected, onClick }: Props) {
   const color = BOT_COLORS[botId] || "#4d96ff";
   const role = BOT_ROLES[botId] || "居民";
   const emotion = getDominantEmotion(bot.emotions);
-  const emotionColor = getEmotionColor(bot.emotions);
   const isDead = bot.status === "dead";
   const hpPct = bot.hp;
 
-  // HP 颜色
-  const hpColor = hpPct > 60 ? "#6bcb77" : hpPct > 30 ? "#ffd93d" : "#ff6b6b";
+  const hpColor = hpPct > 60 ? "bg-green-400" : hpPct > 30 ? "bg-yellow-300" : "bg-red-400";
 
   return (
     <div
       onClick={onClick}
-      className="relative rounded transition-all duration-200 cursor-pointer select-none"
+      className={`relative glass-card p-2.5 cursor-pointer select-none transition-all duration-200 ${
+        isSelected
+          ? "ring-1 shadow-lg"
+          : "hover:bg-white/[0.05]"
+      } ${isDead ? "opacity-40" : ""}`}
       style={{
-        background: isSelected
-          ? `linear-gradient(135deg, rgba(13,26,46,0.95), rgba(15,32,64,0.95))`
-          : "rgba(10,16,28,0.85)",
-        border: `1px solid ${isSelected ? color + "80" : "rgba(77,150,255,0.12)"}`,
-        boxShadow: isSelected ? `0 0 12px ${color}30, inset 0 0 20px ${color}08` : "none",
-        opacity: isDead ? 0.4 : 1,
-        padding: "8px",
+        ...(isSelected ? {
+          ringColor: color,
+          boxShadow: `0 0 16px ${color}20, 0 0 4px ${color}15`,
+          borderColor: `${color}50`,
+        } : {}),
       }}
     >
-      {/* 选中角标 */}
-      {isSelected && (
-        <>
-          <div className="absolute top-0 left-0 w-2 h-2 border-t border-l" style={{ borderColor: color }} />
-          <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r" style={{ borderColor: color }} />
-        </>
-      )}
-
       {/* 头部：头像 + 名字 + 情绪 */}
       <div className="flex items-center gap-2 mb-2">
         {/* 像素头像 */}
         <div
-          className="relative shrink-0 flex items-center justify-center rounded"
+          className="relative shrink-0 flex items-center justify-center rounded-md"
           style={{
             width: 32, height: 32,
-            background: `radial-gradient(circle, ${color}22, transparent)`,
-            border: `1px solid ${color}60`,
+            background: `${color}12`,
+            border: `1px solid ${color}30`,
           }}
         >
-          {/* 像素人形 */}
           <svg width="20" height="20" viewBox="0 0 10 10" style={{ imageRendering: "pixelated" }}>
-            {/* 头 */}
             <rect x="3" y="0" width="4" height="3" fill={color} />
-            {/* 身体 */}
             <rect x="2" y="3" width="6" height="4" fill={color} />
-            {/* 腿 */}
             <rect x="2" y="7" width="2" height="3" fill={color} />
             <rect x="6" y="7" width="2" height="3" fill={color} />
           </svg>
           {bot.is_sleeping && (
-            <span className="absolute -top-1 -right-1 text-[8px]">💤</span>
+            <span className="absolute -top-1 -right-1 text-[10px]">💤</span>
           )}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <span className="text-[11px] font-medium truncate" style={{ color }}>
+            <span className="text-[13px] font-medium truncate" style={{ color }}>
               {bot.name}
             </span>
-            <span className="text-[9px]" style={{ color: "rgba(200,216,240,0.4)" }}>
+            <span className="text-[10px] text-muted-foreground">
               {bot.age}岁
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[9px]" style={{ color: "rgba(200,216,240,0.5)" }}>{role}</span>
-            <span className="text-[10px]">{emotion.emoji}</span>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 font-normal" style={{ color, borderColor: `${color}40` }}>
+              {role}
+            </Badge>
+            <span className="text-[11px]">{emotion.emoji}</span>
           </div>
         </div>
 
         {/* 金钱 */}
         <div className="text-right shrink-0">
-          <div className="text-[10px] font-mono-data" style={{ color: "#ffd93d" }}>
+          <div className="text-[11px] font-mono-data text-yellow-300">
             ¥{bot.money}
           </div>
-          <div className="text-[8px]" style={{ color: "rgba(200,216,240,0.4)" }}>
+          <div className="text-[10px] text-muted-foreground">
             {bot.location?.slice(0, 4)}
           </div>
         </div>
       </div>
 
-      {/* 状态条 */}
-      <div className="space-y-1">
-        <StatBar value={hpPct} color={hpColor} label="HP" />
-        <StatBar value={bot.energy} color="#4d96ff" label="能" />
-        <StatBar value={bot.satiety} color="#ff9f43" label="饱" />
+      {/* HP 条 (主要指标) */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] font-mono-data w-5 shrink-0 text-muted-foreground">HP</span>
+        <Progress
+          value={Math.max(0, Math.min(100, hpPct))}
+          className={`h-1.5 bg-white/[0.06] [&>[data-slot=progress-indicator]]:${hpColor}`}
+        />
+        <span className="text-[10px] font-mono-data w-5 text-right shrink-0 text-muted-foreground">
+          {Math.round(hpPct)}
+        </span>
+      </div>
+
+      {/* 能量/饱腹 - 小号辅助指标 */}
+      <div className="flex items-center gap-3 mt-1">
+        <div className="flex items-center gap-1 flex-1">
+          <span className="text-[10px] text-muted-foreground">能</span>
+          <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+            <div className="h-full rounded-full bg-blue-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, bot.energy))}%` }} />
+          </div>
+        </div>
+        <div className="flex items-center gap-1 flex-1">
+          <span className="text-[10px] text-muted-foreground">饱</span>
+          <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+            <div className="h-full rounded-full bg-orange-400 transition-all duration-500" style={{ width: `${Math.max(0, Math.min(100, bot.satiety))}%` }} />
+          </div>
+        </div>
       </div>
 
       {/* 当前活动 */}
       {bot.current_activity && (
-        <div
-          className="mt-2 text-[8px] truncate"
-          style={{ color: "rgba(200,216,240,0.45)" }}
-          title={bot.current_activity}
-        >
+        <div className="mt-2 text-[10px] truncate text-muted-foreground" title={bot.current_activity}>
           {bot.current_activity}
         </div>
       )}
 
       {/* 死亡遮罩 */}
       {isDead && (
-        <div className="absolute inset-0 flex items-center justify-center rounded"
-          style={{ background: "rgba(0,0,0,0.5)" }}>
-          <span className="text-[10px]" style={{ color: "#ff6b6b" }}>已离开</span>
+        <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
+          <span className="text-xs text-red-400">已离开</span>
         </div>
       )}
     </div>
