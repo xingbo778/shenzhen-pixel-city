@@ -384,3 +384,9 @@ export async function buildStreetFurniture3D(objects: SceneObject[]): Promise<St
 
   return { group, dispose }
 }
+
+/** Clear cached GLB models to free memory between scenes. */
+export function clearFurnitureCache(): void {
+  glbCache.clear()
+  glbLoading.clear()
+}

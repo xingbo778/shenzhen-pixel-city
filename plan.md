@@ -100,7 +100,7 @@ const glbCache = new Map<string, { model: THREE.Object3D, baseY: number }>()
 
 ---
 
-## P1 — 高影响，需要较多改动 (PARTIAL)
+## P1 — 高影响，需要较多改动 (DONE)
 
 ### 6. CharacterSprites3D 视锥剔除 [DONE]
 
@@ -133,7 +133,7 @@ function sync(...) {
 
 ---
 
-### 7. Sprite 材质池化
+### 7. Sprite 材质池化 [SKIPPED — UV state is per-texture, sharing would conflict]
 
 **文件**: `CharacterSprites3D.ts:197-210`
 
@@ -169,7 +169,7 @@ function normalizeModel(model) {
 
 ---
 
-### 9. randomWalkableTile 预计算候选列表
+### 9. randomWalkableTile 预计算候选列表 [DONE — included in P0 pathfinder rewrite]
 
 **文件**: `pathfinder.ts:144-173`
 
@@ -182,7 +182,7 @@ const walkableIndex = new Map<number, [number,number][]>() // row -> walkable ti
 
 ---
 
-## P2 — 中等影响
+## P2 — 中等影响 (MOSTLY DONE)
 
 ### 10. 建筑纹理 mipmap [DONE]
 
@@ -198,7 +198,7 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 ---
 
-### 11. 场景切换时清理全局缓存
+### 11. 场景切换时清理全局缓存 [DONE]
 
 **文件**: `Buildings3D.ts`, `Vehicles3D.ts`, `CharacterSprites3D.ts`
 
@@ -218,7 +218,7 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 ---
 
-### 13. PixelCityMap3D — sceneConfig 引用稳定性
+### 13. PixelCityMap3D — sceneConfig 引用稳定性 [SKIPPED — already stable refs from constant objects]
 
 **文件**: `PixelCityMap3D.tsx:94-96`
 
@@ -228,7 +228,7 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 ---
 
-### 14. useWorldData — 首次连接后不再降级 Mock
+### 14. useWorldData — 首次连接后不再降级 Mock [DONE]
 
 **文件**: `hooks/useWorldData.ts:73-84`
 
@@ -256,7 +256,7 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 预分配 GameEntity 对象池，避免频繁创建/销毁 path 数组产生 GC 压力。
 
-### 19. CSS containment
+### 19. CSS containment [DONE]
 
 对地图容器和右侧面板添加 `contain: content`，限制浏览器重排范围。
 

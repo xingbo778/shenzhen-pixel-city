@@ -413,3 +413,8 @@ export async function buildVehicles3D(
 
   return { group, tick, dispose }
 }
+
+/** Clear cached GLB models to free memory between scenes. */
+export function clearVehicleCache(): void {
+  glbCache.clear()
+}

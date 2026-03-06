@@ -34,7 +34,7 @@ import { buildTileGrid3D }         from '@/engine/three/TileGrid3D'
 import type { TileGrid3DHandle }   from '@/engine/three/TileGrid3D'
 import { buildBuildings3D, preloadBuildings } from '@/engine/three/Buildings3D'
 import type { Buildings3DHandle }  from '@/engine/three/Buildings3D'
-import { buildStreetFurniture3D }  from '@/engine/three/StreetFurniture3D'
+import { buildStreetFurniture3D, clearFurnitureCache }  from '@/engine/three/StreetFurniture3D'
 import type { StreetFurniture3DHandle } from '@/engine/three/StreetFurniture3D'
 import {
   createCharacterSprites3D,
@@ -42,7 +42,7 @@ import {
   tickBubbleLabels,
 } from '@/engine/three/CharacterSprites3D'
 import type { CharacterSprites3DHandle, BubbleLabel } from '@/engine/three/CharacterSprites3D'
-import { buildVehicles3D } from '@/engine/three/Vehicles3D'
+import { buildVehicles3D, clearVehicleCache } from '@/engine/three/Vehicles3D'
 import type { Vehicles3DHandle } from '@/engine/three/Vehicles3D'
 import { TILE_SIZE } from '@/engine/three/ThreeScene'
 import CityPlanView from './CityPlanView'
@@ -145,11 +145,13 @@ export default function PixelCityMap3D({
       scene.remove(furnitureRef.current.group)
       furnitureRef.current.dispose()
       furnitureRef.current = null
+      clearFurnitureCache()
     }
     if (vehicles3DRef.current) {
       scene.remove(vehicles3DRef.current.group)
       vehicles3DRef.current.dispose()
       vehicles3DRef.current = null
+      clearVehicleCache()
     }
 
     // Create sprites handle if needed

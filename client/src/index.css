@@ -130,12 +130,14 @@
   background: var(--sz-surface-1);
   backdrop-filter: blur(12px);
   border: 1px solid var(--sz-border-subtle);
+  contain: layout style;
 }
 
 .glass-panel-solid {
   background: var(--sz-surface-0);
   backdrop-filter: blur(16px);
   border: 1px solid var(--sz-border-default);
+  contain: layout style;
 }
 
 .glass-card {

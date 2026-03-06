@@ -41,6 +41,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
   const pendingRef = useRef(false);
+  const hasConnectedRef = useRef(false);
 
   const fetchWorld = useCallback(async () => {
     if (pendingRef.current) return;
@@ -64,6 +65,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
         ? momentsData
         : (momentsData.moments || []);
 
+      hasConnectedRef.current = true;
       setState(prev => ({
         ...prev,
         world: worldData,
@@ -75,15 +77,19 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
       }));
     } catch (err) {
       if (!isMountedRef.current) return;
-      // 连接失败时使用 Mock 数据，让界面可以正常展示
-      setState(prev => ({
-        ...prev,
-        world: prev.isConnected ? prev.world : (prev.world || MOCK_WORLD),
-        moments: prev.isConnected ? prev.moments : (prev.moments.length > 0 ? prev.moments : MOCK_MOMENTS),
-        isConnected: false,
-        isLoading: false,
-        error: err instanceof Error ? err.message : "连接失败",
-      }));
+      setState(prev => {
+        // After first successful connection, keep last real data on disconnect
+        // Only use mock data if we've NEVER connected successfully
+        const useMock = !hasConnectedRef.current;
+        return {
+          ...prev,
+          world: useMock ? (prev.world || MOCK_WORLD) : prev.world,
+          moments: useMock ? (prev.moments.length > 0 ? prev.moments : MOCK_MOMENTS) : prev.moments,
+          isConnected: false,
+          isLoading: false,
+          error: err instanceof Error ? err.message : "连接失败",
+        };
+      });
     } finally {
       pendingRef.current = false;
     }
