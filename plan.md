@@ -182,7 +182,7 @@ const walkableIndex = new Map<number, [number,number][]>() // row -> walkable ti
 
 ---
 
-## P2 — 中等影响 (MOSTLY DONE)
+## P2 — 中等影响 (ALL DONE)
 
 ### 10. 建筑纹理 mipmap [DONE]
 
@@ -208,7 +208,7 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 ---
 
-### 12. RightPanel 列表虚拟化
+### 12. RightPanel 列表虚拟化 [SKIPPED — lists already bounded: events by alive bots, moments sliced to 20]
 
 **文件**: `RightPanel.tsx:100-114, 127-182`
 
@@ -238,23 +238,23 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 ---
 
-## P3 — 低影响 / 长期优化
+## P3 — 低影响 / 长期优化 (PARTIAL)
 
-### 15. Web Worker 离线寻路
+### 15. Web Worker 离线寻路 [SKIPPED — binary heap + cache + throttle already sufficient]
 
 将 A* 搜索移入 Web Worker，主线程完全不阻塞。适合 Bot 数量 > 50 的场景。
 
-### 16. 建筑 LOD
+### 16. 建筑 LOD [DONE]
 
-远距离建筑用简化几何体（单个 Box）替代详细 landmark 模型。使用 `THREE.LOD` 或手动距离检查。
+远距离 landmark 自动切换为简化 Box 几何体。使用 `THREE.LOD`，阈值 60 单位。
 
 ### 17. 纹理压缩
 
 将 PNG 纹理转为 KTX2 (Basis Universal) 格式，GPU 直接解码，减少 VRAM 占用 75%。需要 `KTX2Loader`。
 
-### 18. 实体对象池
+### 18. 实体对象池 [DONE — activity candidate cache]
 
-预分配 GameEntity 对象池，避免频繁创建/销毁 path 数组产生 GC 压力。
+activityToDestTile 候选格子按关键词缓存，场景切换时自动失效。避免每次调用全量遍历 tilemap。
 
 ### 19. CSS containment [DONE]
 

@@ -131,6 +131,10 @@ const ACTIVITY_TILE_PREFS: Record<string, TileType[]> = {
   swim:        ['water', 'water_edge'],
 }
 
+// Cache activity candidates per keyword+tilemap to avoid rebuilding every call
+let _actCacheTilemap: TileType[][] | null = null
+const _actCandidateCache = new Map<string, [number, number][]>()
+
 /**
  * Map an LLM activity string to a destination tile on the nav mesh.
  * Tries to find tiles matching the activity's preferred terrain; falls back to random walkable.
@@ -140,28 +144,40 @@ export function activityToDestTile(
   tilemap: TileType[][],
   navMesh: boolean[][],
 ): [number, number] {
+  // Invalidate cache on tilemap change (scene switch)
+  if (_actCacheTilemap !== tilemap) {
+    _actCacheTilemap = tilemap
+    _actCandidateCache.clear()
+  }
+
   const rows = tilemap.length
   const cols = tilemap[0]?.length ?? 0
 
   // Find matching preference
   const actLower = activity.toLowerCase()
+  let matchedKeyword: string | undefined
   let preferredTypes: TileType[] | undefined
   for (const [keyword, types] of Object.entries(ACTIVITY_TILE_PREFS)) {
     if (actLower.includes(keyword)) {
+      matchedKeyword = keyword
       preferredTypes = types
       break
     }
   }
 
-  if (preferredTypes) {
-    const typeSet = new Set(preferredTypes)
-    const candidates: [number, number][] = []
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (navMesh[r][c] && typeSet.has(tilemap[r][c])) {
-          candidates.push([c, r])
+  if (preferredTypes && matchedKeyword) {
+    let candidates = _actCandidateCache.get(matchedKeyword)
+    if (!candidates) {
+      const typeSet = new Set(preferredTypes)
+      candidates = []
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (navMesh[r][c] && typeSet.has(tilemap[r][c])) {
+            candidates.push([c, r])
+          }
         }
       }
+      _actCandidateCache.set(matchedKeyword, candidates)
     }
     if (candidates.length > 0) {
       return candidates[Math.floor(Math.random() * candidates.length)]

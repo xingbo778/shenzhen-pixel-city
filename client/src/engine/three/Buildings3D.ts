@@ -252,14 +252,33 @@ function buildLandmarkKK100(width: number, depth: number): THREE.Object3D {
   return obj
 }
 
-function buildLandmark(key: string, width: number, depth: number): THREE.Object3D | null {
+function buildLandmarkLOD(key: string, width: number, depth: number): THREE.Object3D | null {
+  let detailed: THREE.Object3D | null = null
   switch (key) {
-    case 'landmark_civic':  return buildLandmarkCivic(width, depth)
-    case 'landmark_pingan': return buildLandmarkPingan(width, depth)
-    case 'landmark_expo':   return buildLandmarkExpo(width, depth)
-    case 'landmark_kk100':  return buildLandmarkKK100(width, depth)
+    case 'landmark_civic':  detailed = buildLandmarkCivic(width, depth); break
+    case 'landmark_pingan': detailed = buildLandmarkPingan(width, depth); break
+    case 'landmark_expo':   detailed = buildLandmarkExpo(width, depth); break
+    case 'landmark_kk100':  detailed = buildLandmarkKK100(width, depth); break
     default: return null
   }
+  if (!detailed) return null
+
+  const meta = MODEL_META[key] ?? DEFAULT_META
+  const lod = new THREE.LOD()
+
+  // Level 0: detailed geometry (close range)
+  lod.addLevel(detailed, 0)
+
+  // Level 1: simple box (far range, > 60 units)
+  const simpleH = meta.h
+  const simpleMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(meta.color) })
+  const simpleBox = new THREE.Mesh(new THREE.BoxGeometry(width, simpleH, depth), simpleMat)
+  simpleBox.position.y = simpleH / 2
+  const simpleGroup = new THREE.Object3D()
+  simpleGroup.add(simpleBox)
+  lod.addLevel(simpleGroup, 60)
+
+  return lod
 }
 
 // ── Build a single building sized to its tile footprint ──────────────
@@ -348,6 +367,7 @@ function buildTexturedBox(
 
 export interface Buildings3DHandle {
   group:   THREE.Group
+  updateLOD: (camera: THREE.Camera) => void
   dispose: () => void
 }
 
@@ -372,7 +392,7 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
     if (isLandmarkKey(key)) {
       const width = tileW * TILE_SIZE - MARGIN * 2
       const depth = tileH * TILE_SIZE - MARGIN * 2
-      const lm = buildLandmark(key, width, depth)
+      const lm = buildLandmarkLOD(key, width, depth)
       if (!lm) return
       instance = lm
     } else {
@@ -383,6 +403,14 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
     instance.position.z = posZ
     group.add(instance)
   })
+
+  function updateLOD(camera: THREE.Camera) {
+    group.traverse(child => {
+      if (child instanceof THREE.LOD) {
+        child.update(camera)
+      }
+    })
+  }
 
   function dispose() {
     group.traverse(child => {
@@ -398,7 +426,7 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
     texCache.clear()
   }
 
-  return { group, dispose }
+  return { group, updateLOD, dispose }
 }
 
 export function preloadBuildings(keys: string[]): void {

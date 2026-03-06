@@ -349,8 +349,9 @@ export default function PixelCityMap3D({
       }
     })
 
-    // Tick 3D vehicles
+    // Tick 3D vehicles + building LOD
     vehicles3DRef.current?.tick(dt)
+    buildingsRef.current?.updateLOD(three.camera)
 
     // Bubble labels
     bubblesRef.current = tickBubbleLabels(
