@@ -40,8 +40,11 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
+  const pendingRef = useRef(false);
 
   const fetchWorld = useCallback(async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     const url = engineUrlRef.current;
     try {
       const [worldRes, momentsRes] = await Promise.all([
@@ -81,6 +84,8 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
         isLoading: false,
         error: err instanceof Error ? err.message : "连接失败",
       }));
+    } finally {
+      pendingRef.current = false;
     }
   }, []);
 

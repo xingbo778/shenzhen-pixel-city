@@ -8,7 +8,9 @@ import { BOT_COLORS, LOCATION_MAP_CONFIG } from "@/types/world";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Smartphone, MapPin } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+
+const LOC_NAMES = Object.keys(LOCATION_MAP_CONFIG);
 
 interface Props {
   world: WorldState | null;
@@ -49,33 +51,36 @@ export default function RightPanel({ world, moments, selectedLocation, onBotClic
 
 // ===== 事件流 =====
 function EventsTab({ world, onBotClick }: { world: WorldState | null; onBotClick: (id: string) => void }) {
+  const events = useMemo(() => {
+    if (!world) return [];
+    const result: { time: string; botId: string; botName: string; text: string; color: string }[] = [];
+    Object.entries(world.bots).forEach(([botId, bot]) => {
+      if (bot.status !== "alive") return;
+      const color = BOT_COLORS[botId] || "#4d96ff";
+      const logs = bot.action_log || [];
+      if (logs.length > 0) {
+        const last = logs[logs.length - 1];
+        result.push({
+          time: last.time?.slice(11, 16) || "",
+          botId,
+          botName: bot.name,
+          text: last.result?.narrative || last.plan || bot.current_activity || "...",
+          color,
+        });
+      } else if (bot.current_activity) {
+        result.push({
+          time: "",
+          botId,
+          botName: bot.name,
+          text: bot.current_activity,
+          color,
+        });
+      }
+    });
+    return result;
+  }, [world]);
+
   if (!world) return <EmptyState text="等待连接..." />;
-
-  const events: { time: string; botId: string; botName: string; text: string; color: string }[] = [];
-
-  Object.entries(world.bots).forEach(([botId, bot]) => {
-    if (bot.status !== "alive") return;
-    const color = BOT_COLORS[botId] || "#4d96ff";
-    const logs = bot.action_log || [];
-    if (logs.length > 0) {
-      const last = logs[logs.length - 1];
-      events.push({
-        time: last.time?.slice(11, 16) || "",
-        botId,
-        botName: bot.name,
-        text: last.result?.narrative || last.plan || bot.current_activity || "...",
-        color,
-      });
-    } else if (bot.current_activity) {
-      events.push({
-        time: "",
-        botId,
-        botName: bot.name,
-        text: bot.current_activity,
-        color,
-      });
-    }
-  });
 
   const worldEvents = world.events || [];
 
@@ -120,11 +125,13 @@ function EventsTab({ world, onBotClick }: { world: WorldState | null; onBotClick
 
 // ===== 朋友圈 =====
 function MomentsTab({ moments, world }: { moments: Moment[]; world: WorldState | null }) {
+  const recentMoments = useMemo(() => [...moments].reverse().slice(0, 20), [moments]);
+
   if (moments.length === 0) return <EmptyState text="朋友圈空空如也..." />;
 
   return (
     <div className="p-2 space-y-2">
-      {[...moments].reverse().slice(0, 20).map(moment => {
+      {recentMoments.map(moment => {
         const bot = world?.bots[moment.bot_id];
         const color = BOT_COLORS[moment.bot_id] || "#4d96ff";
 
@@ -197,13 +204,11 @@ function LocationTab({
 
   if (!world) return <EmptyState text="等待连接..." />;
 
-  const locNames = Object.keys(LOCATION_MAP_CONFIG);
-
   return (
     <div className="p-2">
       {/* 地点选择 */}
       <div className="flex flex-wrap gap-1 mb-3">
-        {locNames.map(loc => {
+        {LOC_NAMES.map(loc => {
           const cfg = LOCATION_MAP_CONFIG[loc];
           const count = world.locations[loc]?.bots?.length || 0;
           const isActive = displayLoc === loc;

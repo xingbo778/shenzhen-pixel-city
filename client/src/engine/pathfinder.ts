@@ -1,6 +1,11 @@
 /**
  * Pathfinder — navigation mesh construction + A* search
  * Supports pedestrian, vehicle, and boat movement modes.
+ *
+ * Optimizations:
+ * - Binary heap for open list (O(log n) pop vs O(n) linear scan)
+ * - Path cache with TTL to avoid redundant A* for same from→to
+ * - Pre-indexed walkable tiles per row band for randomWalkableTile
  */
 
 import type { TileType } from './sceneTiles'
@@ -40,7 +45,7 @@ export function buildNavMesh(tilemap: TileType[][], mode: NavMode): boolean[][] 
   return tilemap.map(row => row.map(tile => passable.has(tile)))
 }
 
-// ── A* pathfinding ──────────────────────────────────────────────
+// ── Binary min-heap for A* open list ─────────────────────────────
 
 interface Node {
   col: number
@@ -50,15 +55,89 @@ interface Node {
   parent: Node | null
 }
 
+class MinHeap {
+  private data: Node[] = []
+
+  get length() { return this.data.length }
+
+  push(node: Node) {
+    this.data.push(node)
+    this._bubbleUp(this.data.length - 1)
+  }
+
+  pop(): Node | undefined {
+    const top = this.data[0]
+    const last = this.data.pop()
+    if (this.data.length > 0 && last) {
+      this.data[0] = last
+      this._sinkDown(0)
+    }
+    return top
+  }
+
+  private _bubbleUp(i: number) {
+    const d = this.data
+    while (i > 0) {
+      const p = (i - 1) >> 1
+      if (d[p].f <= d[i].f) break
+      ;[d[p], d[i]] = [d[i], d[p]]
+      i = p
+    }
+  }
+
+  private _sinkDown(i: number) {
+    const d = this.data
+    const n = d.length
+    while (true) {
+      let smallest = i
+      const l = 2 * i + 1
+      const r = 2 * i + 2
+      if (l < n && d[l].f < d[smallest].f) smallest = l
+      if (r < n && d[r].f < d[smallest].f) smallest = r
+      if (smallest === i) break
+      ;[d[smallest], d[i]] = [d[i], d[smallest]]
+      i = smallest
+    }
+  }
+}
+
+// ── Path cache ───────────────────────────────────────────────────
+
+interface CachedPath {
+  path: [number, number][]
+  ts: number
+}
+
+const PATH_CACHE = new Map<string, CachedPath>()
+const CACHE_TTL = 5000  // 5 seconds
+const MAX_CACHE_SIZE = 200
+
+function prunePathCache() {
+  if (PATH_CACHE.size <= MAX_CACHE_SIZE) return
+  const now = Date.now()
+  PATH_CACHE.forEach((entry, key) => {
+    if (now - entry.ts > CACHE_TTL) PATH_CACHE.delete(key)
+  })
+  // If still too large, drop oldest half
+  if (PATH_CACHE.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(PATH_CACHE.entries())
+    entries.sort((a, b) => a[1].ts - b[1].ts)
+    const toRemove = entries.slice(0, Math.floor(entries.length / 2))
+    toRemove.forEach(([k]) => PATH_CACHE.delete(k))
+  }
+}
+
+// ── A* pathfinding ──────────────────────────────────────────────
+
 const DIRS: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]]
 
-function heuristic(a: [number, number], b: [number, number]): number {
-  return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])
+function heuristic(ac: number, ar: number, bc: number, br: number): number {
+  return Math.abs(ac - bc) + Math.abs(ar - br)
 }
 
 /**
  * A* search on the nav mesh. Returns tile coordinate path from `from` to `to` (inclusive).
- * Returns empty array if unreachable.
+ * Returns empty array if unreachable. Results are cached for 5 seconds.
  */
 export function findPath(
   mesh: boolean[][],
@@ -76,10 +155,17 @@ export function findPath(
   if (tr < 0 || tr >= rows || tc < 0 || tc >= cols) return []
   if (!mesh[tr][tc]) return []
 
-  // If start is blocked, allow it (entity might be on a building edge)
-  const startNode: Node = { col: fc, row: fr, g: 0, f: heuristic(from, to), parent: null }
+  // Check cache
+  const cacheKey = `${fc},${fr}-${tc},${tr}`
+  const cached = PATH_CACHE.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return cached.path.map(p => [p[0], p[1]] as [number, number])
+  }
 
-  const open: Node[] = [startNode]
+  // If start is blocked, allow it (entity might be on a building edge)
+  const open = new MinHeap()
+  open.push({ col: fc, row: fr, g: 0, f: heuristic(fc, fr, tc, tr), parent: null })
+
   const closed = new Set<number>()
   const key = (c: number, r: number) => r * cols + c
 
@@ -87,14 +173,7 @@ export function findPath(
   gMap.set(key(fc, fr), 0)
 
   while (open.length > 0) {
-    // Pop node with lowest f
-    let bestIdx = 0
-    for (let i = 1; i < open.length; i++) {
-      if (open[i].f < open[bestIdx].f) bestIdx = i
-    }
-    const current = open[bestIdx]
-    open[bestIdx] = open[open.length - 1]
-    open.pop()
+    const current = open.pop()!
 
     if (current.col === tc && current.row === tr) {
       // Reconstruct path
@@ -105,6 +184,9 @@ export function findPath(
         n = n.parent
       }
       path.reverse()
+      // Cache result
+      PATH_CACHE.set(cacheKey, { path, ts: Date.now() })
+      prunePathCache()
       return path
     }
 
@@ -129,13 +211,31 @@ export function findPath(
         col: nc,
         row: nr,
         g: ng,
-        f: ng + heuristic([nc, nr], to),
+        f: ng + heuristic(nc, nr, tc, tr),
         parent: current,
       })
     }
   }
 
+  // Cache negative result too
+  PATH_CACHE.set(cacheKey, { path: [], ts: Date.now() })
   return []
+}
+
+// ── Walkable tile index ─────────────────────────────────────────
+
+let _walkableAll: [number, number][] | null = null
+let _walkableMesh: boolean[][] | null = null
+
+function ensureWalkableIndex(mesh: boolean[][]) {
+  if (_walkableMesh === mesh) return
+  _walkableMesh = mesh
+  _walkableAll = []
+  for (let r = 0; r < mesh.length; r++) {
+    for (let c = 0; c < (mesh[0]?.length ?? 0); c++) {
+      if (mesh[r][c]) _walkableAll.push([c, r])
+    }
+  }
 }
 
 /**
@@ -146,28 +246,18 @@ export function randomWalkableTile(
   nearRow?: number,
   rowRange: number = 6,
 ): [number, number] {
-  const rows = mesh.length
-  const cols = mesh[0]?.length ?? 0
-  const candidates: [number, number][] = []
+  ensureWalkableIndex(mesh)
+  if (!_walkableAll || _walkableAll.length === 0) return [0, 0]
 
-  const rMin = nearRow !== undefined ? Math.max(0, nearRow - rowRange) : 0
-  const rMax = nearRow !== undefined ? Math.min(rows - 1, nearRow + rowRange) : rows - 1
-
-  for (let r = rMin; r <= rMax; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (mesh[r][c]) candidates.push([c, r])
+  if (nearRow !== undefined) {
+    const rMin = Math.max(0, nearRow - rowRange)
+    const rMax = Math.min(mesh.length - 1, nearRow + rowRange)
+    // Filter from pre-built index
+    const nearby = _walkableAll.filter(([, r]) => r >= rMin && r <= rMax)
+    if (nearby.length > 0) {
+      return nearby[Math.floor(Math.random() * nearby.length)]
     }
   }
 
-  if (candidates.length === 0) {
-    // Fallback: any walkable tile
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (mesh[r][c]) candidates.push([c, r])
-      }
-    }
-  }
-
-  if (candidates.length === 0) return [0, 0]
-  return candidates[Math.floor(Math.random() * candidates.length)]
+  return _walkableAll[Math.floor(Math.random() * _walkableAll.length)]
 }

@@ -32,16 +32,15 @@ function normalizeModel(model: THREE.Object3D): void {
   const size = new THREE.Vector3()
   box.getSize(size)
   const maxDim = Math.max(size.x, size.y, size.z)
-  if (maxDim > 0) {
-    const s = 1.0 / maxDim
-    model.scale.multiplyScalar(s)
-  }
-  // Re-center on ground
-  const box2 = new THREE.Box3().setFromObject(model)
+  if (maxDim <= 0) return
+  const s = 1.0 / maxDim
+  model.scale.multiplyScalar(s)
+  // Derive center/bottom from original box scaled, avoiding second Box3 traversal
   const center = new THREE.Vector3()
-  box2.getCenter(center)
+  box.getCenter(center)
+  center.multiplyScalar(s)
   model.position.sub(center)
-  model.position.y -= box2.min.y
+  model.position.y -= box.min.y * s
 }
 
 function loadGLB(key: string): Promise<THREE.Object3D | null> {

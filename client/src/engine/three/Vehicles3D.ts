@@ -77,7 +77,7 @@ function pickVehicleDef(): VehicleDef {
 
 // ── GLB model cache ──────────────────────────────────────────────────
 
-const glbCache = new Map<string, THREE.Object3D>()
+const glbCache = new Map<string, { model: THREE.Object3D; baseY: number }>()
 const gltfLoader = new GLTFLoader()
 
 function normalizeModel(model: THREE.Object3D): void {
@@ -97,7 +97,7 @@ function normalizeModel(model: THREE.Object3D): void {
 }
 
 async function loadGLB(file: string): Promise<THREE.Object3D> {
-  if (glbCache.has(file)) return glbCache.get(file)!.clone()
+  if (glbCache.has(file)) return glbCache.get(file)!.model.clone()
 
   const url = `/sprites/vehicles/models/${file}`
   return new Promise((resolve, reject) => {
@@ -106,7 +106,7 @@ async function loadGLB(file: string): Promise<THREE.Object3D> {
       (gltf) => {
         const model = gltf.scene
         normalizeModel(model)
-        glbCache.set(file, model)
+        glbCache.set(file, { model, baseY: 0 })
         resolve(model.clone())
       },
       undefined,
@@ -120,9 +120,20 @@ async function preloadAllGLBs(): Promise<void> {
     .filter(d => d.glbFile)
     .map(d => d.glbFile!)
   const unique = Array.from(new Set(files))
-  await Promise.all(unique.map(f => loadGLB(f).catch(e => {
-    console.warn(`[Vehicles3D] Failed to load ${f}:`, e)
-  })))
+  await Promise.all(unique.map(async f => {
+    try {
+      await loadGLB(f)
+      // Pre-compute baseY at scale=1 so spawn doesn't need Box3
+      const cached = glbCache.get(f)
+      if (cached && cached.baseY === 0) {
+        const tempClone = cached.model.clone()
+        const box = new THREE.Box3().setFromObject(tempClone)
+        cached.baseY = -box.min.y
+      }
+    } catch (e) {
+      console.warn(`[Vehicles3D] Failed to load ${f}:`, e)
+    }
+  }))
 }
 
 // ── Procedural fallback meshes ───────────────────────────────────────
@@ -324,12 +335,10 @@ export async function buildVehicles3D(
       let baseY = 0
       if (def.glbFile && glbCache.has(def.glbFile)) {
         const cached = glbCache.get(def.glbFile)!
-        mesh = cached.clone()
+        mesh = cached.model.clone()
         mesh.scale.setScalar(def.scale)
-        // The cached model has position.y set so bottom sits at y=0;
-        // after scaling, recompute so bottom stays at ground level
-        const box = new THREE.Box3().setFromObject(mesh)
-        baseY = -box.min.y
+        // Use cached baseY scaled proportionally (model is normalized at y=0)
+        baseY = cached.baseY * def.scale
       } else {
         mesh = buildFallbackMesh(def.kind)
       }

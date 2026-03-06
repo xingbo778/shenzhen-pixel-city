@@ -360,7 +360,7 @@ export default function PixelCityMap3D({
     )
 
     // Sync character sprites
-    charRef.current?.sync(entitiesRef.current, world, VIRTUAL_TILE_PX, selectedBotId)
+    charRef.current?.sync(entitiesRef.current, world, VIRTUAL_TILE_PX, selectedBotId, three.camera)
 
     // Update camera
     const cols = sc.cols

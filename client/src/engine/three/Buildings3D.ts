@@ -74,6 +74,8 @@ function loadTex(url: string): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = THREE.RepeatWrapping
   tex.wrapT = THREE.RepeatWrapping
+  tex.generateMipmaps = true
+  tex.minFilter = THREE.LinearMipmapLinearFilter
   texCache.set(url, tex)
   return tex
 }

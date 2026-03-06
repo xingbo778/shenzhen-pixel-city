@@ -171,6 +171,7 @@ export interface CharacterSprites3DHandle {
     world:    WorldState | null,
     tileSize: number,
     selectedBotId: string | null,
+    camera?:  THREE.Camera,
   ) => void
   dispose: () => void
 }
@@ -240,14 +241,25 @@ export function createCharacterSprites3D(): CharacterSprites3DHandle {
     })
   }
 
+  const _frustum = new THREE.Frustum()
+  const _projMatrix = new THREE.Matrix4()
+  const _testPoint = new THREE.Vector3()
+
   function sync(
     entities: Record<string, GameEntity>,
     world: WorldState | null,
     tileSize: number,
     selectedBotId: string | null,
+    camera?: THREE.Camera,
   ) {
     const activeIds = new Set(Object.keys(entities))
     removeStale(activeIds)
+
+    // Build frustum for culling (with margin)
+    if (camera) {
+      _projMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+      _frustum.setFromProjectionMatrix(_projMatrix)
+    }
 
     let idx = 0
     for (const [botId, entity] of Object.entries(entities)) {
@@ -259,6 +271,18 @@ export function createCharacterSprites3D(): CharacterSprites3DHandle {
       const row = entity.pixelY / (tileSize || 1)
       const worldX = col * TILE_SIZE
       const worldZ = row * TILE_SIZE
+
+      // Frustum culling — skip off-screen entities (unless selected)
+      if (camera && botId !== selectedBotId) {
+        _testPoint.set(worldX, CHAR_HEIGHT, worldZ)
+        if (!_frustum.containsPoint(_testPoint)) {
+          if (entry.model) entry.model.visible = false
+          if (entry.sprite) entry.sprite.visible = false
+          continue
+        }
+      }
+      if (entry.model) entry.model.visible = true
+      if (entry.sprite) entry.sprite.visible = true
 
       if (entry.mode === '3d' && entry.model) {
         // Compute movement delta to detect walking & derive facing angle
