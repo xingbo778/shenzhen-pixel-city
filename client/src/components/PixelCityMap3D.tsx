@@ -81,6 +81,7 @@ export default function PixelCityMap3D({
   const entitiesRef   = useRef<Record<string, GameEntity>>({})
   const vehiclesRef   = useRef<VehicleState[]>([])
   const navMeshRef    = useRef<NavMeshCache>(null)
+  const sceneBuildTokenRef = useRef(0)
 
   // Camera pan / zoom
   const zoomRef       = useRef(1.0)
@@ -129,6 +130,12 @@ export default function PixelCityMap3D({
   useEffect(() => {
     if (!threeRef.current || !sceneConfig) return
     const { scene } = threeRef.current
+    const buildToken = ++sceneBuildTokenRef.current
+    let disposed = false
+    const reportBuildError = (label: string, error: unknown) => {
+      if (disposed || buildToken !== sceneBuildTokenRef.current) return
+      console.error(`[PixelCityMap3D] Failed to load ${label}`, error)
+    }
 
     // Remove old grid / buildings
     if (tileGridRef.current) {
@@ -171,24 +178,33 @@ export default function PixelCityMap3D({
     preloadBuildings(keys)
 
     buildBuildings3D(sceneConfig.objects).then(bldgs => {
-      if (!threeRef.current) return
+      if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
+        bldgs.dispose()
+        return
+      }
       threeRef.current.scene.add(bldgs.group)
       buildingsRef.current = bldgs
-    })
+    }).catch(error => reportBuildError('buildings', error))
 
     // Street furniture (trees, traffic lights, signs, etc.)
     buildStreetFurniture3D(sceneConfig.objects).then(furn => {
-      if (!threeRef.current) return
+      if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
+        furn.dispose()
+        return
+      }
       threeRef.current.scene.add(furn.group)
       furnitureRef.current = furn
-    })
+    }).catch(error => reportBuildError('street furniture', error))
 
     // 3D vehicles on roads (async — loads GLB models)
     buildVehicles3D(sceneConfig.tilemap, 120).then(v3d => {
-      if (!threeRef.current) return
+      if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
+        v3d.dispose()
+        return
+      }
       threeRef.current.scene.add(v3d.group)
       vehicles3DRef.current = v3d
-    })
+    }).catch(error => reportBuildError('vehicles', error))
 
     // Reset camera to map centre
     const cols = sceneConfig.cols
@@ -207,6 +223,9 @@ export default function PixelCityMap3D({
       : 10
     vehiclesRef.current = initVehicles(activeLocation, botCount)
 
+    return () => {
+      disposed = true
+    }
   }, [activeLocation])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Entity sync (real bots + demo fallback) ─────────────────────────

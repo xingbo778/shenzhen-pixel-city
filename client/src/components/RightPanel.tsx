@@ -8,7 +8,7 @@ import { BOT_COLORS, LOCATION_MAP_CONFIG } from "@/types/world";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Zap, Smartphone, MapPin } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 const LOC_NAMES = Object.keys(LOCATION_MAP_CONFIG);
 
@@ -200,7 +200,12 @@ function LocationTab({
   onBotClick: (id: string) => void;
 }) {
   const [viewLoc, setViewLoc] = useState<string | null>(null);
-  const displayLoc = viewLoc || selectedLocation;
+
+  useEffect(() => {
+    setViewLoc(selectedLocation);
+  }, [selectedLocation]);
+
+  const displayLoc = viewLoc;
 
   if (!world) return <EmptyState text="等待连接..." />;
 

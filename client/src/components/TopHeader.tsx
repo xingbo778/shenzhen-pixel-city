@@ -6,25 +6,80 @@
 import { WEATHER_ICONS } from "@/types/world";
 import type { WorldState } from "@/types/world";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { getWorldMetrics } from "@/lib/worldMetrics";
+import { useEffect, useState } from "react";
+import { DatabaseZap, RefreshCw, ServerCrash, TestTube2 } from "lucide-react";
+import type { DataSourceMode } from "@/hooks/useWorldData";
 
 interface Props {
   world: WorldState | null;
   isConnected: boolean;
+  isLoading: boolean;
   lastUpdated: Date | null;
   engineUrl: string;
+  dataSourceMode: DataSourceMode;
   onEngineUrlChange: (url: string) => void;
+  onDataSourceModeChange: (mode: DataSourceMode) => void;
+  onRefresh: () => void;
 }
 
-export default function TopHeader({ world, isConnected, lastUpdated, engineUrl, onEngineUrlChange }: Props) {
+export default function TopHeader({
+  world,
+  isConnected,
+  isLoading,
+  lastUpdated,
+  engineUrl,
+  dataSourceMode,
+  onEngineUrlChange,
+  onDataSourceModeChange,
+  onRefresh,
+}: Props) {
   const time = world?.time;
   const weather = world?.weather;
   const weatherIcon = weather ? (WEATHER_ICONS[weather.current] || "🌤️") : "🌤️";
+  const { aliveBots, totalMoney, avgHappiness } = getWorldMetrics(world);
+  const [draftUrl, setDraftUrl] = useState(engineUrl);
 
-  const aliveBots = world ? Object.values(world.bots).filter(b => b.status === "alive").length : 0;
-  const totalMoney = world ? Object.values(world.bots).reduce((s, b) => s + (b.money || 0), 0) : 0;
-  const avgHappiness = world
-    ? Math.round(Object.values(world.bots).reduce((s, b) => s + (b.emotions?.happiness || 0), 0) / Math.max(aliveBots, 1))
-    : 0;
+  useEffect(() => {
+    setDraftUrl(engineUrl);
+  }, [engineUrl]);
+
+  const normalizedDraft = draftUrl.trim();
+  const isDirty = normalizedDraft !== engineUrl;
+
+  const modeMeta: Record<DataSourceMode, {
+    label: string;
+    hint: string;
+    badgeClassName: string;
+    icon: typeof DatabaseZap;
+  }> = {
+    auto: {
+      label: "AUTO",
+      hint: "优先真实后端，首次连接失败时自动回退到演示数据",
+      badgeClassName: "border-cyan-400/30 text-cyan-300",
+      icon: DatabaseZap,
+    },
+    real: {
+      label: "REAL",
+      hint: "只使用 world_engine；若后端不可用则显示空状态与错误信息",
+      badgeClassName: "border-amber-400/30 text-amber-300",
+      icon: ServerCrash,
+    },
+    mock: {
+      label: "MOCK",
+      hint: "始终使用内置演示数据，不依赖 world_engine",
+      badgeClassName: "border-emerald-400/30 text-emerald-300",
+      icon: TestTube2,
+    },
+  };
+  const activeModeMeta = modeMeta[dataSourceMode];
+  const ModeIcon = activeModeMeta.icon;
+
+  const handleSubmit = () => {
+    if (!normalizedDraft) return;
+    onEngineUrlChange(normalizedDraft);
+  };
 
   const newsItems = world?.news_feed || [];
   const hotTopics = world?.hot_topics || [];
@@ -44,6 +99,10 @@ export default function TopHeader({ world, isConnected, lastUpdated, engineUrl, 
           </div>
           <Badge variant="outline" className="text-[10px] font-orbitron">
             LIVE SIM
+          </Badge>
+          <Badge variant="outline" className={`text-[10px] font-orbitron ${activeModeMeta.badgeClassName}`}>
+            <ModeIcon className="size-3" />
+            {activeModeMeta.label}
           </Badge>
         </div>
 
@@ -89,19 +148,59 @@ export default function TopHeader({ world, isConnected, lastUpdated, engineUrl, 
               {isConnected ? "已连接" : "离线"}
             </span>
           </div>
+          <select
+            value={dataSourceMode}
+            onChange={e => onDataSourceModeChange(e.target.value as DataSourceMode)}
+            className="h-7 rounded-md border border-white/[0.08] bg-white/[0.04] px-2 text-xs text-muted-foreground outline-none focus:border-primary/40"
+          >
+            <option value="auto">AUTO</option>
+            <option value="real">REAL</option>
+            <option value="mock">MOCK</option>
+          </select>
           <input
             type="text"
-            value={engineUrl}
-            onChange={e => onEngineUrlChange(e.target.value)}
+            value={draftUrl}
+            onChange={e => setDraftUrl(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
             className="text-xs px-2.5 py-1 rounded-md outline-none w-44 bg-white/[0.04] border border-white/[0.08] text-muted-foreground focus:border-primary/40 transition-colors"
             placeholder="http://localhost:8000"
+            disabled={dataSourceMode === "mock"}
           />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={handleSubmit}
+            disabled={dataSourceMode === "mock" || !normalizedDraft || !isDirty}
+          >
+            应用
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onRefresh}
+            disabled={isLoading}
+          >
+            <RefreshCw className={isLoading ? "size-3.5 animate-spin" : "size-3.5"} />
+            刷新
+          </Button>
           {lastUpdated && (
             <span className="text-[10px] text-muted-foreground/50">
               {lastUpdated.toLocaleTimeString("zh-CN")}
             </span>
           )}
         </div>
+      </div>
+
+      <div className="px-4 py-1 text-[10px] text-muted-foreground/70 border-t border-white/[0.04]">
+        数据模式:
+        <span className="ml-1 text-foreground/80">{activeModeMeta.hint}</span>
       </div>
 
       {/* 新闻滚动条 */}

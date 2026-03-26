@@ -5,30 +5,117 @@
  *       点击 Bot 卡片时右侧切换为 Bot 详情
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useWorldData, sendMessage, setEngineUrl } from "@/hooks/useWorldData";
+import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from "react";
+import { useWorldData, sendMessage, setEngineUrl, type DataSourceMode } from "@/hooks/useWorldData";
 import { OVERVIEW_TO_SCENE_KEY } from "@/config/scenes";
-import PixelCityMap3D from "@/components/PixelCityMap3D";
-import CityOverviewMap from "@/components/CityOverviewMap";
 import BotCard from "@/components/BotCard";
-import BotDetailPanel from "@/components/BotDetailPanel";
-import RightPanel from "@/components/RightPanel";
 import TopHeader from "@/components/TopHeader";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 
-export default function Home() {
-  const [engineUrl, setEngineUrlState] = useState(
-    (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000"
+const ENGINE_URL_STORAGE_KEY = "szpc.engineUrl";
+const DATA_SOURCE_MODE_STORAGE_KEY = "szpc.dataSourceMode";
+
+function getInitialEngineUrl() {
+  const fallback = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    return window.localStorage.getItem(ENGINE_URL_STORAGE_KEY) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getInitialDataSourceMode(): DataSourceMode {
+  if (typeof window === "undefined") return "auto";
+  try {
+    const saved = window.localStorage.getItem(DATA_SOURCE_MODE_STORAGE_KEY);
+    if (saved === "auto" || saved === "real" || saved === "mock") return saved;
+  } catch {
+    // ignore storage failures
+  }
+  return "auto";
+}
+
+const PixelCityMap3D = lazy(() => import("@/components/PixelCityMap3D"));
+const CityOverviewMap = lazy(() => import("@/components/CityOverviewMap"));
+const BotDetailPanel = lazy(() => import("@/components/BotDetailPanel"));
+const RightPanel = lazy(() => import("@/components/RightPanel"));
+
+function PanelFallback({ label }: { label: string }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
   );
-  const { world, moments, isConnected, isLoading, lastUpdated, error } = useWorldData(3000, engineUrl);
+}
+
+function RealModeEmptyState({
+  engineUrl,
+  error,
+  onRetry,
+}: {
+  engineUrl: string;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/92 backdrop-blur-sm">
+      <div className="max-w-md px-6 text-center">
+        <div className="text-sm font-medium text-foreground">REAL 模式未连接到 world_engine</div>
+        <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          当前只允许使用真实后端数据，演示数据已禁用。
+        </div>
+        <div className="mt-3 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-left text-xs text-muted-foreground">
+          <div>地址: {engineUrl}</div>
+          <div className="mt-1">错误: {error || "未获取到 world_engine 响应"}</div>
+        </div>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onRetry}>
+            重试连接
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Home() {
+  const [engineUrl, setEngineUrlState] = useState(getInitialEngineUrl);
+  const [dataSourceMode, setDataSourceMode] = useState<DataSourceMode>(getInitialDataSourceMode);
+  const { world, moments, isConnected, isLoading, lastUpdated, error, refresh } = useWorldData(3000, engineUrl, dataSourceMode);
 
   const handleEngineUrlChange = useCallback((url: string) => {
-    setEngineUrlState(url);
-    setEngineUrl(url);
+    const normalizedUrl = url.trim().replace(/\/$/, "");
+    if (!normalizedUrl) {
+      toast.error("请输入有效的 world_engine 地址");
+      return;
+    }
+
+    setEngineUrlState(normalizedUrl);
+    setEngineUrl(normalizedUrl);
+    toast.success(`world_engine 已切换到 ${normalizedUrl}`);
   }, []);
+
+  useEffect(() => {
+    setEngineUrl(engineUrl);
+    try {
+      window.localStorage.setItem(ENGINE_URL_STORAGE_KEY, engineUrl);
+    } catch {
+      // ignore storage failures
+    }
+  }, [engineUrl]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DATA_SOURCE_MODE_STORAGE_KEY, dataSourceMode);
+    } catch {
+      // ignore storage failures
+    }
+  }, [dataSourceMode]);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [currentMapLocation, setCurrentMapLocation] = useState<string>('宝安城中村');
@@ -103,9 +190,13 @@ export default function Home() {
       <TopHeader
         world={world}
         isConnected={isConnected}
+        isLoading={isLoading}
         lastUpdated={lastUpdated}
         engineUrl={engineUrl}
+        dataSourceMode={dataSourceMode}
         onEngineUrlChange={handleEngineUrlChange}
+        onDataSourceModeChange={setDataSourceMode}
+        onRefresh={refresh}
       />
 
       {/* 主体区域 */}
@@ -161,37 +252,64 @@ export default function Home() {
             </div>
           )}
 
+          {dataSourceMode === "mock" && !isLoading && (
+            <div className="absolute top-10 left-3 z-10 rounded-md border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] text-emerald-300 backdrop-blur-sm">
+              MOCK MODE · 使用内置演示数据
+            </div>
+          )}
+
+          {dataSourceMode === "real" && !isConnected && !isLoading && !world && (
+            <RealModeEmptyState engineUrl={engineUrl} error={error} onRetry={refresh} />
+          )}
+
           {/* 错误提示 */}
-          {!isConnected && !isLoading && (
+          {dataSourceMode !== "mock" && dataSourceMode !== "real" && !isConnected && !isLoading && (
             <Alert variant="destructive" className="absolute bottom-8 left-3 right-3 z-10">
               <AlertTriangle className="size-4" />
               <AlertDescription className="text-xs">
-                无法连接到 world_engine ({engineUrl})。请确保 world_engine_v8.py 正在运行，或修改上方地址。
+                <div>无法连接到 world_engine ({engineUrl})。</div>
+                <div className="mt-1 text-destructive/80">
+                  {error || "请确保 world_engine_v8.py 正在运行，或修改上方地址。"}
+                </div>
+                <div className="mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 border-destructive/30 text-destructive hover:bg-destructive/10"
+                    onClick={() => refresh()}
+                  >
+                    重试连接
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
           {/* 全景层 */}
           {mapLayer === 'overview' && (
-            <div className="absolute inset-0">
-              <CityOverviewMap
-                world={world}
-                onLocationSelect={handleOverviewLocationSelect}
-              />
-            </div>
+            <Suspense fallback={<PanelFallback label="加载全景地图..." />}>
+              <div className="absolute inset-0">
+                <CityOverviewMap
+                  world={world}
+                  onLocationSelect={handleOverviewLocationSelect}
+                />
+              </div>
+            </Suspense>
           )}
 
           {/* 场景层 */}
           {mapLayer === 'scene' && (
-            <div className="absolute inset-0">
-              <PixelCityMap3D
-                world={world}
-                selectedBotId={selectedBotId}
-                onBotClick={handleBotClick}
-                onLocationClick={handleLocationClick}
-                currentLocation={currentMapLocation}
-              />
-            </div>
+            <Suspense fallback={<PanelFallback label="加载 3D 场景..." />}>
+              <div className="absolute inset-0">
+                <PixelCityMap3D
+                  world={world}
+                  selectedBotId={selectedBotId}
+                  onBotClick={handleBotClick}
+                  onLocationClick={handleLocationClick}
+                  currentLocation={currentMapLocation}
+                />
+              </div>
+            </Suspense>
           )}
         </div>
 
@@ -250,23 +368,27 @@ export default function Home() {
               className="shrink-0 overflow-hidden border-b border-white/[0.06]"
               style={{ height: "45%" }}
             >
-              <BotDetailPanel
-                botId={selectedBotId}
-                bot={selectedBot}
-                onClose={() => setShowBotDetail(false)}
-                onSendMessage={handleSendMessage}
-              />
+              <Suspense fallback={<div className="flex h-full items-center justify-center text-xs text-muted-foreground">加载 Bot 详情...</div>}>
+                <BotDetailPanel
+                  botId={selectedBotId}
+                  bot={selectedBot}
+                  onClose={() => setShowBotDetail(false)}
+                  onSendMessage={handleSendMessage}
+                />
+              </Suspense>
             </div>
           )}
 
           {/* 下半部分：标签页信息面板 */}
           <div className="flex-1 overflow-hidden">
-            <RightPanel
-              world={world}
-              moments={moments}
-              selectedLocation={selectedLocation}
-              onBotClick={handleBotClick}
-            />
+            <Suspense fallback={<div className="flex h-full items-center justify-center text-xs text-muted-foreground">加载侧边栏...</div>}>
+              <RightPanel
+                world={world}
+                moments={moments}
+                selectedLocation={selectedLocation}
+                onBotClick={handleBotClick}
+              />
+            </Suspense>
           </div>
         </div>
       </div>

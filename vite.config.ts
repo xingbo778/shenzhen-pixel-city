@@ -167,14 +167,25 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          three: ["three"],
-          ui: ["react", "react-dom"],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("/three/examples/") || id.includes("/three/addons/")) return "three-addons";
+          if (id.includes("/three/")) return "three";
+          if (id.includes("/react/") || id.includes("/react-dom/")) return "react-vendor";
+          if (id.includes("/@radix-ui/")) return "radix";
+          if (id.includes("/lucide-react/")) return "icons";
+          if (id.includes("/framer-motion/")) return "motion";
+          return "vendor";
         },
       },
     },
+  },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
   server: {
     port: 3000,

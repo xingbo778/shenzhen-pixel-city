@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { WorldState, Moment } from "@/types/world";
 import { MOCK_WORLD, MOCK_MOMENTS } from "@/lib/mockData";
+import { parseMomentsPayload, parseWorldPayload } from "@/lib/worldValidation";
 
 // 全局 engineUrl，支持运行时动态修改
 let _engineUrl = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
@@ -22,7 +23,9 @@ export interface WorldDataState {
   error: string | null;
 }
 
-export function useWorldData(pollInterval = 3000, engineUrl?: string) {
+export type DataSourceMode = "auto" | "real" | "mock";
+
+export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: DataSourceMode = "auto") {
   const [state, setState] = useState<WorldDataState>({
     world: null,
     moments: [],
@@ -40,47 +43,59 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const pendingRef = useRef(false);
   const hasConnectedRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchWorld = useCallback(async () => {
-    if (pendingRef.current) return;
-    pendingRef.current = true;
+    if (mode === "mock") {
+      hasConnectedRef.current = false;
+      setState({
+        world: MOCK_WORLD,
+        moments: MOCK_MOMENTS,
+        isConnected: false,
+        isLoading: false,
+        lastUpdated: new Date(),
+        error: null,
+      });
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
     const url = engineUrlRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const [worldRes, momentsRes] = await Promise.all([
-        fetch(`${url}/world`, { signal: AbortSignal.timeout(5000) }),
-        fetch(`${url}/moments`, { signal: AbortSignal.timeout(5000) }),
+        fetch(`${url}/world`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) }),
+        fetch(`${url}/moments`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) }),
       ]);
 
       if (!worldRes.ok) throw new Error(`HTTP ${worldRes.status}`);
 
-      const worldData: WorldState = await worldRes.json();
-      const momentsData = momentsRes.ok ? await momentsRes.json() : { moments: [] };
+      const worldData = parseWorldPayload(await worldRes.json());
+      const momentsData = momentsRes.ok ? parseMomentsPayload(await momentsRes.json()) : [];
 
-      if (!isMountedRef.current) return;
-
-      // world_engine /moments 返回 { moments: [...] } 或直接 [...]
-      const momentsList = Array.isArray(momentsData)
-        ? momentsData
-        : (momentsData.moments || []);
+      if (!isMountedRef.current || requestId !== requestIdRef.current) return;
 
       hasConnectedRef.current = true;
       setState(prev => ({
         ...prev,
         world: worldData,
-        moments: momentsList,
+        moments: momentsData,
         isConnected: true,
         isLoading: false,
         lastUpdated: new Date(),
         error: null,
       }));
     } catch (err) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || requestId !== requestIdRef.current) return;
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setState(prev => {
         // After first successful connection, keep last real data on disconnect
-        // Only use mock data if we've NEVER connected successfully
-        const useMock = !hasConnectedRef.current;
+        // Only use mock data in auto mode when we've NEVER connected successfully
+        const useMock = mode === "auto" && !hasConnectedRef.current;
         return {
           ...prev,
           world: useMock ? (prev.world || MOCK_WORLD) : prev.world,
@@ -90,18 +105,23 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
           error: err instanceof Error ? err.message : "连接失败",
         };
       });
-    } finally {
-      pendingRef.current = false;
     }
-  }, []);
+  }, [mode]);
 
   // 当 engineUrl 变化时立即重新拉取
   useEffect(() => {
-    if (engineUrl) {
-      engineUrlRef.current = engineUrl;
+    if (engineUrl || mode === "mock") {
+      engineUrlRef.current = engineUrl || _engineUrl;
+      hasConnectedRef.current = false;
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        isLoading: true,
+        error: null,
+      }));
       fetchWorld();
     }
-  }, [engineUrl, fetchWorld]);
+  }, [engineUrl, mode, fetchWorld]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -118,6 +138,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
 
     return () => {
       isMountedRef.current = false;
+      abortRef.current?.abort();
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [fetchWorld, pollInterval]);
@@ -128,20 +149,29 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string) {
 // 发送消息给 Bot
 export async function sendMessage(targetId: string, message: string, senderAlias = "观察者") {
   const url = _engineUrl;
-  const res = await fetch(`${url}/admin/send_message`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from: senderAlias, to: targetId, message }),
-  });
-  return res.ok;
+  try {
+    const res = await fetch(`${url}/admin/send_message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from: senderAlias, to: targetId, message }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 // 获取 Bot 详情
 export async function fetchBotDetail(botId: string) {
   const url = _engineUrl;
-  const res = await fetch(`${url}/bot/${botId}/detail`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${url}/bot/${botId}/detail`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
