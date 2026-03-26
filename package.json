@@ -10,7 +10,8 @@
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "textures:ktx2": "node scripts/generate-ktx2-textures.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

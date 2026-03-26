@@ -32,7 +32,7 @@ import { createThreeScene, setCameraTarget } from '@/engine/three/ThreeScene'
 import type { ThreeSceneHandle }   from '@/engine/three/ThreeScene'
 import { buildTileGrid3D }         from '@/engine/three/TileGrid3D'
 import type { TileGrid3DHandle }   from '@/engine/three/TileGrid3D'
-import { buildBuildings3D, preloadBuildings } from '@/engine/three/Buildings3D'
+import { buildBuildings3D, initBuildingTextureLoader, preloadBuildings } from '@/engine/three/Buildings3D'
 import type { Buildings3DHandle }  from '@/engine/three/Buildings3D'
 import { buildStreetFurniture3D, clearFurnitureCache }  from '@/engine/three/StreetFurniture3D'
 import type { StreetFurniture3DHandle } from '@/engine/three/StreetFurniture3D'
@@ -114,6 +114,7 @@ export default function PixelCityMap3D({
     if (!canvas || !container) return
 
     const three = createThreeScene(canvas, container)
+    initBuildingTextureLoader(three.renderer)
     threeRef.current = three
 
     const w = container.clientWidth

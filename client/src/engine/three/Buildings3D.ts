@@ -10,6 +10,7 @@
  */
 
 import * as THREE from 'three'
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
 import type { SceneObject } from '../sceneTiles'
 import { TILE_SIZE }        from './ThreeScene'
 import { isFurnitureKey }   from './StreetFurniture3D'
@@ -66,26 +67,109 @@ function isLandmarkKey(key: string): boolean {
 // ── Texture loading ──────────────────────────────────────────────────
 const texLoader = new THREE.TextureLoader()
 const texCache  = new Map<string, THREE.Texture>()
+const texPromiseCache = new Map<string, Promise<THREE.Texture>>()
 const matCache  = new Map<string, THREE.MeshLambertMaterial>()
+const assetExistsCache = new Map<string, Promise<boolean>>()
+let ktx2Loader: KTX2Loader | null = null
+let ktx2Enabled = false
 
-function loadTex(url: string): THREE.Texture {
-  if (texCache.has(url)) return texCache.get(url)!
-  const tex = texLoader.load(url)
+function configureTexture(tex: THREE.Texture): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = THREE.RepeatWrapping
   tex.wrapT = THREE.RepeatWrapping
   tex.generateMipmaps = true
   tex.minFilter = THREE.LinearMipmapLinearFilter
-  texCache.set(url, tex)
   return tex
 }
 
-function getBuildingTextures(key: string) {
+function loadPngTexture(url: string): Promise<THREE.Texture> {
+  if (texCache.has(url)) return Promise.resolve(texCache.get(url)!)
+  if (texPromiseCache.has(url)) return texPromiseCache.get(url)!
+
+  const pending = new Promise<THREE.Texture>((resolve, reject) => {
+    texLoader.load(
+      url,
+      texture => {
+        const tex = configureTexture(texture)
+        texCache.set(url, tex)
+        texPromiseCache.delete(url)
+        resolve(tex)
+      },
+      undefined,
+      error => {
+        texPromiseCache.delete(url)
+        reject(error)
+      },
+    )
+  })
+
+  texPromiseCache.set(url, pending)
+  return pending
+}
+
+function loadKtx2Texture(url: string): Promise<THREE.Texture> {
+  if (texCache.has(url)) return Promise.resolve(texCache.get(url)!)
+  if (texPromiseCache.has(url)) return texPromiseCache.get(url)!
+  if (!ktx2Loader) return Promise.reject(new Error('KTX2 loader is not initialized'))
+
+  const pending = new Promise<THREE.Texture>((resolve, reject) => {
+    ktx2Loader!.load(
+      url,
+      texture => {
+        const tex = configureTexture(texture)
+        texCache.set(url, tex)
+        texPromiseCache.delete(url)
+        resolve(tex)
+      },
+      undefined,
+      error => {
+        texPromiseCache.delete(url)
+        reject(error)
+      },
+    )
+  })
+
+  texPromiseCache.set(url, pending)
+  return pending
+}
+
+async function assetExists(url: string): Promise<boolean> {
+  if (assetExistsCache.has(url)) return assetExistsCache.get(url)!
+
+  const pending = fetch(url, { method: 'HEAD' })
+    .then(response => response.ok)
+    .catch(() => false)
+
+  assetExistsCache.set(url, pending)
+  return pending
+}
+
+async function loadTex(urlBase: string): Promise<THREE.Texture> {
+  const ktx2Url = `${urlBase}.ktx2`
+  if (ktx2Enabled && await assetExists(ktx2Url)) {
+    try {
+      return await loadKtx2Texture(ktx2Url)
+    } catch (error) {
+      console.warn(`[Buildings3D] Failed to load KTX2 texture ${ktx2Url}, falling back to PNG`, error)
+    }
+  }
+  return loadPngTexture(`${urlBase}.png`)
+}
+
+async function getBuildingTextures(key: string) {
   const base = `/sprites/buildings/textures/${key}`
   return {
-    facade: loadTex(`${base}_facade.png`),
-    roof:   loadTex(`${base}_roof.png`),
+    facade: await loadTex(`${base}_facade`),
+    roof:   await loadTex(`${base}_roof`),
   }
+}
+
+export function initBuildingTextureLoader(renderer: THREE.WebGLRenderer): void {
+  if (ktx2Loader) return
+  ktx2Loader = new KTX2Loader()
+  ktx2Loader.setTranscoderPath('/basis/')
+  ktx2Loader.detectSupport(renderer)
+  ktx2Enabled = true
 }
 
 // ── Seeded random ────────────────────────────────────────────────────
@@ -290,6 +374,7 @@ function buildTexturedBox(
   heightScale: number,
   tileW: number,
   tileH: number,
+  textures: { facade: THREE.Texture; roof: THREE.Texture },
 ): THREE.Object3D {
   const meta  = MODEL_META[key] ?? DEFAULT_META
   const color = new THREE.Color(meta.color)
@@ -302,7 +387,7 @@ function buildTexturedBox(
   const hv     = 0.85 + sr() * 0.3
   const height = meta.h * heightScale * hv
 
-  const { facade, roof } = getBuildingTextures(key)
+  const { facade, roof } = textures
 
   const facadeKey = `facade:${key}`
   const roofKey   = `roof:${key}`
@@ -374,6 +459,15 @@ export interface Buildings3DHandle {
 export async function buildBuildings3D(objects: SceneObject[]): Promise<Buildings3DHandle> {
   const group = new THREE.Group()
   _seed = 12345
+  const textureKeys = Array.from(new Set(
+    objects
+      .map(obj => obj.pngKey ?? '')
+      .filter(key => !!key && !isFurnitureKey(key) && !isLandmarkKey(key)),
+  ))
+  const textureEntries = await Promise.all(
+    textureKeys.map(async key => [key, await getBuildingTextures(key)] as const),
+  )
+  const texturesByKey = new Map(textureEntries)
 
   objects.forEach(obj => {
     const key = obj.pngKey ?? ''
@@ -396,7 +490,9 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
       if (!lm) return
       instance = lm
     } else {
-      instance = buildTexturedBox(key, heightScale, tileW, tileH)
+      const textures = texturesByKey.get(key)
+      if (!textures) return
+      instance = buildTexturedBox(key, heightScale, tileW, tileH, textures)
     }
 
     instance.position.x = posX
@@ -430,5 +526,5 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
 }
 
 export function preloadBuildings(keys: string[]): void {
-  keys.forEach(k => getBuildingTextures(k))
+  void Promise.all(keys.map(k => getBuildingTextures(k)))
 }

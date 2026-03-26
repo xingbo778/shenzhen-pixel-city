@@ -13,6 +13,7 @@ import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 const PROJECT_ROOT = import.meta.dirname;
 const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
+const CLIENT_PUBLIC_DIR = path.join(PROJECT_ROOT, "client", "public");
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
 const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
 
@@ -21,6 +22,23 @@ type LogSource = "browserConsole" | "networkRequests" | "sessionReplay";
 function ensureLogDir() {
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
+  }
+}
+
+function ensureThreeBasisAssets() {
+  const sourceDir = path.join(PROJECT_ROOT, "node_modules", "three", "examples", "jsm", "libs", "basis");
+  const targetDir = path.join(CLIENT_PUBLIC_DIR, "basis");
+
+  if (!fs.existsSync(sourceDir)) {
+    return;
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const fileName of ["basis_transcoder.js", "basis_transcoder.wasm"]) {
+    const source = path.join(sourceDir, fileName);
+    const target = path.join(targetDir, fileName);
+    if (!fs.existsSync(source)) continue;
+    fs.copyFileSync(source, target);
   }
 }
 
@@ -151,6 +169,8 @@ function vitePluginManusDebugCollector(): Plugin {
 }
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+
+ensureThreeBasisAssets();
 
 export default defineConfig({
   plugins,

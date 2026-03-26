@@ -248,9 +248,9 @@ tex.minFilter = THREE.LinearMipmapLinearFilter
 
 远距离 landmark 自动切换为简化 Box 几何体。使用 `THREE.LOD`，阈值 60 单位。
 
-### 17. 纹理压缩
+### 17. 纹理压缩 [DONE]
 
-将 PNG 纹理转为 KTX2 (Basis Universal) 格式，GPU 直接解码，减少 VRAM 占用 75%。需要 `KTX2Loader`。
+将 PNG 纹理转为 KTX2 (Basis Universal) 格式，GPU 直接解码，减少 VRAM 占用 75%。已接入 `KTX2Loader`，自动同步 `basis_transcoder` 资源，并生成建筑纹理 `.ktx2` 资产。
 
 ### 18. 实体对象池 [DONE — activity candidate cache]
 
