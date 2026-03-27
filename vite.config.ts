@@ -194,7 +194,6 @@ export default defineConfig({
           if (!id.includes("node_modules")) return;
           if (id.includes("/three/examples/") || id.includes("/three/addons/")) return "three-addons";
           if (id.includes("/three/")) return "three";
-          if (id.includes("/react/") || id.includes("/react-dom/")) return "react-vendor";
           if (id.includes("/@radix-ui/")) return "radix";
           if (id.includes("/lucide-react/")) return "icons";
           if (id.includes("/framer-motion/")) return "motion";

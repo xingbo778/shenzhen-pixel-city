@@ -77,8 +77,13 @@ function configureTexture(tex: THREE.Texture): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = THREE.RepeatWrapping
   tex.wrapT = THREE.RepeatWrapping
-  tex.generateMipmaps = true
-  tex.minFilter = THREE.LinearMipmapLinearFilter
+  if ('isCompressedTexture' in tex && tex.isCompressedTexture) {
+    tex.generateMipmaps = false
+    tex.minFilter = THREE.LinearFilter
+  } else {
+    tex.generateMipmaps = true
+    tex.minFilter = THREE.LinearMipmapLinearFilter
+  }
   return tex
 }
 
@@ -137,7 +142,11 @@ async function assetExists(url: string): Promise<boolean> {
   if (assetExistsCache.has(url)) return assetExistsCache.get(url)!
 
   const pending = fetch(url, { method: 'HEAD' })
-    .then(response => response.ok)
+    .then(response => {
+      if (!response.ok) return false
+      const contentType = (response.headers.get('content-type') || '').toLowerCase()
+      return contentType.includes('image/ktx2') || contentType.includes('application/octet-stream')
+    })
     .catch(() => false)
 
   assetExistsCache.set(url, pending)
@@ -526,5 +535,6 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
 }
 
 export function preloadBuildings(keys: string[]): void {
-  void Promise.all(keys.map(k => getBuildingTextures(k)))
+  const filtered = keys.filter(key => !isFurnitureKey(key) && !isLandmarkKey(key))
+  void Promise.all(filtered.map(k => getBuildingTextures(k)))
 }
