@@ -233,7 +233,7 @@ export default function PixelCityMap3D({
     const botCount = world
       ? Object.keys(world.bots).filter(id => world.bots[id].status === 'alive').length
       : 10
-    vehiclesRef.current = initVehicles(activeLocation, botCount)
+    vehiclesRef.current = initVehicles(activeLocation, botCount, sceneConfig.tilemap)
 
     return () => {
       disposed = true

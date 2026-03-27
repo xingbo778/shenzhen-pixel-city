@@ -9,6 +9,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import type { TileType } from '../sceneTiles'
 import { TILE_SIZE } from './ThreeScene'
+import { extractTrafficLaneSegments } from '../roadGraph'
 
 // ── Vehicle kind ─────────────────────────────────────────────────────
 
@@ -259,12 +260,6 @@ export interface Vehicles3DHandle {
   dispose: () => void
 }
 
-function isRoadTile(t: TileType, horizontal: boolean): boolean {
-  if (t === 'road_cross' || t.startsWith('road_cross_zebra')) return true
-  if (horizontal) return t === 'road_h' || t === 'road_stop_h'
-  return t === 'road_v' || t === 'road_stop_v'
-}
-
 export async function buildVehicles3D(
   tilemap: TileType[][],
   maxVehicles = 120,
@@ -279,44 +274,9 @@ export async function buildVehicles3D(
   // Pre-load all GLB models
   await preloadAllGLBs()
 
-  // Find horizontal road lanes
-  const hLanes: { row: number; minCol: number; maxCol: number }[] = []
-  for (let r = 0; r < rows; r++) {
-    let start = -1
-    for (let c = 0; c < cols; c++) {
-      if (isRoadTile(tilemap[r][c], true)) {
-        if (start < 0) start = c
-      } else {
-        if (start >= 0 && c - start > 8) {
-          hLanes.push({ row: r, minCol: start, maxCol: c - 1 })
-        }
-        start = -1
-      }
-    }
-    if (start >= 0 && cols - start > 8)
-      hLanes.push({ row: r, minCol: start, maxCol: cols - 1 })
-  }
-
-  // Find vertical road lanes
-  const vLanes: { col: number; minRow: number; maxRow: number }[] = []
-  for (let c = 0; c < cols; c++) {
-    let start = -1
-    for (let r = 0; r < rows; r++) {
-      if (isRoadTile(tilemap[r][c], false)) {
-        if (start < 0) start = r
-      } else {
-        if (start >= 0 && r - start > 8) {
-          vLanes.push({ col: c, minRow: start, maxRow: r - 1 })
-        }
-        start = -1
-      }
-    }
-    if (start >= 0 && rows - start > 8)
-      vLanes.push({ col: c, minRow: start, maxRow: rows - 1 })
-  }
-
-  const pickedH = hLanes.filter((_, i) => i % 2 === 0)
-  const pickedV = vLanes.filter((_, i) => i % 2 === 0)
+  const roadSegments = extractTrafficLaneSegments(tilemap).filter(segment => segment.surface === 'road')
+  const pickedH = roadSegments.filter((segment, i) => segment.axis === 'h' && i % 2 === 0)
+  const pickedV = roadSegments.filter((segment, i) => segment.axis === 'v' && i % 2 === 0)
 
   let count = 0
 
@@ -374,12 +334,12 @@ export async function buildVehicles3D(
 
   for (const lane of pickedH) {
     if (count >= maxVehicles) break
-    await spawnOnLane('h', lane.row, lane.minCol, lane.maxCol)
+    await spawnOnLane('h', lane.lanePos, lane.min, lane.max)
   }
 
   for (const lane of pickedV) {
     if (count >= maxVehicles) break
-    await spawnOnLane('v', lane.col, lane.minRow, lane.maxRow)
+    await spawnOnLane('v', lane.lanePos, lane.min, lane.max)
   }
 
   function tick(dt: number) {

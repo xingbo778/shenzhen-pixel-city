@@ -7,6 +7,8 @@
 
 import { preloadImage, getImage, isImageLoaded } from './imageCache'
 import type { ZDrawable } from './types'
+import type { TileType } from './sceneTiles'
+import { extractTrafficLaneSegments } from './roadGraph'
 
 // ── Types ────────────────────────────────────────────────────────
 export type VehicleType =
@@ -45,81 +47,6 @@ export interface VehicleLane {
   dir: 1 | -1
 }
 
-export const SCENE_VEHICLE_LANES: Record<string, VehicleLane[]> = {
-  '宝安城中村': [
-    { type: 'shared_bike', y: 0.35, xMin: 0.05, xMax: 0.90, dir:  1 },
-    { type: 'shared_bike', y: 0.62, xMin: 0.05, xMax: 0.90, dir: -1 },
-    { type: 'meituan',     y: 0.35, xMin: 0.05, xMax: 0.90, dir: -1 },
-    { type: 'meituan',     y: 0.62, xMin: 0.05, xMax: 0.90, dir:  1 },
-    { type: 'shared_bike', y: 0.50, xMin: 0.10, xMax: 0.50, dir:  1 },
-    { type: 'shared_bike', y: 0.50, xMin: 0.50, xMax: 0.90, dir: -1 },
-    { type: 'sweeper',     y: 0.78, xMin: 0.05, xMax: 0.95, dir:  1 },
-  ],
-  '南山科技园': [
-    { type: 'shared_bike', y: 0.55, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'shared_bike', y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'meituan',     y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'taxi',        y: 0.80, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'taxi',        y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'bus',         y: 0.85, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'sweeper',     y: 0.88, xMin: 0.05, xMax: 0.95, dir: -1 },
-  ],
-  '福田CBD': [
-    // 红荔路 (~row 12%)
-    { type: 'taxi',        y: 0.12, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'shared_bike', y: 0.13, xMin: 0.05, xMax: 0.95, dir: -1 },
-    // 福华路 (~row 38%)
-    { type: 'taxi',        y: 0.37, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'bus',         y: 0.39, xMin: 0.05, xMax: 0.95, dir: -1 },
-    // 深南大道 (~row 58%, widest road)
-    { type: 'taxi',        y: 0.56, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'taxi',        y: 0.57, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'bus',         y: 0.59, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'huolala',     y: 0.60, xMin: 0.05, xMax: 0.95, dir: -1 },
-    // 滨河大道 (~row 82%)
-    { type: 'taxi',        y: 0.81, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'meituan',     y: 0.83, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'sweeper',     y: 0.84, xMin: 0.05, xMax: 0.95, dir:  1 },
-  ],
-  '华强北': [
-    { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'shared_bike', y: 0.50, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'shared_bike', y: 0.50, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'meituan',     y: 0.70, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'taxi',        y: 0.85, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'sweeper',     y: 0.88, xMin: 0.05, xMax: 0.95, dir:  1 },
-  ],
-  '东门老街': [
-    { type: 'shared_bike', y: 0.30, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'shared_bike', y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'meituan',     y: 0.30, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'shared_bike', y: 0.75, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'meituan',     y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'sweeper',     y: 0.80, xMin: 0.05, xMax: 0.95, dir:  1 },
-  ],
-  '南山公寓': [
-    { type: 'taxi',        y: 0.50, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'taxi',        y: 0.55, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'shared_bike', y: 0.60, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'meituan',     y: 0.75, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'taxi',        y: 0.75, xMin: 0.05, xMax: 0.95, dir:  1 },
-    { type: 'bus',         y: 0.80, xMin: 0.05, xMax: 0.95, dir: -1 },
-    { type: 'sweeper',     y: 0.83, xMin: 0.05, xMax: 0.95, dir:  1 },
-  ],
-  '深圳湾公园': [
-    { type: 'shared_bike',  y: 0.32, xMin: 0.02, xMax: 0.98, dir:  1 },
-    { type: 'shared_bike',  y: 0.32, xMin: 0.02, xMax: 0.98, dir: -1 },
-    { type: 'shared_bike',  y: 0.36, xMin: 0.02, xMax: 0.98, dir:  1 },
-    { type: 'meituan',      y: 0.38, xMin: 0.02, xMax: 0.98, dir: -1 },
-    { type: 'sweeper',      y: 0.40, xMin: 0.02, xMax: 0.98, dir:  1 },
-    { type: 'fishing_boat', y: 0.68, xMin: 0.02, xMax: 0.98, dir:  1 },
-    { type: 'cruise',       y: 0.75, xMin: 0.02, xMax: 0.98, dir: -1 },
-    { type: 'speedboat',    y: 0.82, xMin: 0.02, xMax: 0.98, dir:  1 },
-    { type: 'fishing_boat', y: 0.88, xMin: 0.02, xMax: 0.98, dir: -1 },
-  ],
-}
-
 export interface VehicleState {
   id: string
   type: VehicleType
@@ -143,8 +70,8 @@ export function preloadVehicleSheets(): void {
   }
 }
 
-export function initVehicles(location: string, botCount: number): VehicleState[] {
-  const lanes = SCENE_VEHICLE_LANES[location] || []
+export function initVehicles(location: string, botCount: number, tilemap: TileType[][]): VehicleState[] {
+  const lanes = buildVehicleLanes(tilemap)
   const vehicles: VehicleState[] = []
   const extraPerLane = Math.floor(botCount / 5)
   lanes.forEach((lane, laneIdx) => {
@@ -164,6 +91,69 @@ export function initVehicles(location: string, botCount: number): VehicleState[]
     }
   })
   return vehicles
+}
+
+function buildVehicleLanes(tilemap: TileType[][]): VehicleLane[] {
+  const rows = tilemap.length
+  const cols = tilemap[0]?.length ?? 0
+  if (rows === 0 || cols === 0) return []
+
+  const segments = extractTrafficLaneSegments(tilemap)
+  const roadSegments = segments.filter(segment => segment.surface === 'road')
+  const waterSegments = segments.filter(segment => segment.surface === 'water' && segment.axis === 'h')
+  const lanes: VehicleLane[] = []
+
+  roadSegments.forEach((segment, index) => {
+    const type = pickRoadVehicleType(segment, index)
+    const dir: 1 | -1 = (segment.lanePos + index) % 2 === 0 ? 1 : -1
+    if (segment.axis === 'h') {
+      lanes.push({
+        type,
+        y: (segment.lanePos + 0.5) / rows,
+        xMin: segment.min / cols,
+        xMax: (segment.max + 1) / cols,
+        dir,
+      })
+      return
+    }
+
+    lanes.push({
+      type,
+      y: ((segment.min + segment.max + 1) / 2) / rows,
+      xMin: (segment.lanePos + 0.25) / cols,
+      xMax: (segment.lanePos + 0.75) / cols,
+      dir,
+    })
+  })
+
+  waterSegments.forEach((segment, index) => {
+    const type = pickWaterVehicleType(index)
+    const dir: 1 | -1 = (segment.lanePos + index) % 2 === 0 ? 1 : -1
+    lanes.push({
+      type,
+      y: (segment.lanePos + 0.5) / rows,
+      xMin: segment.min / cols,
+      xMax: (segment.max + 1) / cols,
+      dir,
+    })
+  })
+
+  return lanes
+}
+
+function pickRoadVehicleType(segment: { axis: 'h' | 'v'; min: number; max: number }, index: number): VehicleType {
+  const span = segment.max - segment.min + 1
+  if (span >= 20 && index % 5 === 0) return 'bus'
+  if (span >= 16 && index % 4 === 0) return 'huolala'
+  if (segment.axis === 'v' && index % 3 === 0) return 'shared_bike'
+  if (index % 5 === 1) return 'meituan'
+  if (index % 7 === 2) return 'sweeper'
+  return 'taxi'
+}
+
+function pickWaterVehicleType(index: number): VehicleType {
+  const fleet: VehicleType[] = ['fishing_boat', 'cruise', 'speedboat']
+  return fleet[index % fleet.length]
 }
 
 // ── Drawing ──────────────────────────────────────────────────────

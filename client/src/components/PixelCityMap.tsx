@@ -105,7 +105,7 @@ export default function PixelCityMap({
     const botCount = world
       ? Object.keys(world.bots).filter(id => world.bots[id].status === 'alive').length
       : 10
-    vehiclesRef.current    = initVehicles(activeLocation, botCount)
+    vehiclesRef.current    = initVehicles(activeLocation, botCount, sceneConfig.tilemap)
     panOffsetRef.current   = { x: 0, y: 0 }
   }, [activeLocation])  // eslint-disable-line react-hooks/exhaustive-deps
 
