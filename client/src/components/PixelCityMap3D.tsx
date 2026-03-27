@@ -16,7 +16,7 @@ import type { WorldState } from '@/types/world'
 import { getDominantEmotion } from '@/types/world'
 import { SCENE_META, SCENE_NAMES, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/config/scenes'
 import { SCENE_CONFIGS } from '@/engine/sceneTiles'
-import { buildNavMesh, randomWalkableTile, findPath } from '@/engine/pathfinder'
+import { buildNavMesh, randomWalkableTile, findPathChunked } from '@/engine/pathfinder'
 import { createEntity, tickEntity, assignActivityPath } from '@/engine/gameEntity'
 import type { GameEntity } from '@/engine/gameEntity'
 import {
@@ -310,7 +310,7 @@ export default function PixelCityMap3D({
         entity.activity = occupations[i % occupations.length]
         // Use nearby destination (rowRange=20) to keep A* fast
         const dest = randomWalkableTile(navMesh, spawn[1], 20)
-        const path = findPath(navMesh, [spawn[0], spawn[1]], dest)
+        const path = findPathChunked(navMesh, [spawn[0], spawn[1]], dest)
         if (path.length > 1) {
           entity.path = path
           entity.pathIdx = 1
@@ -385,7 +385,7 @@ export default function PixelCityMap3D({
         pathsThisFrame++
         if (botId.startsWith('demo_')) {
           const dest = randomWalkableTile(navMesh, entity.row, 25)
-          const path = findPath(navMesh, [entity.col, entity.row], dest)
+          const path = findPathChunked(navMesh, [entity.col, entity.row], dest)
           if (path.length > 1) {
             entity.path = path
             entity.pathIdx = 1

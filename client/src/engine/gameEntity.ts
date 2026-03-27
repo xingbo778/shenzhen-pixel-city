@@ -4,7 +4,7 @@
  */
 
 import type { TileType } from './sceneTiles'
-import { findPath, randomWalkableTile } from './pathfinder'
+import { findPathChunked, randomWalkableTile } from './pathfinder'
 
 export type Facing = 'front' | 'back' | 'left' | 'right'
                    | 'front_left' | 'front_right' | 'back_left' | 'back_right'
@@ -198,7 +198,7 @@ export function assignActivityPath(
   navMesh: boolean[][],
 ): boolean {
   const dest = activityToDestTile(activity, tilemap, navMesh)
-  const path = findPath(navMesh, [entity.col, entity.row], dest)
+  const path = findPathChunked(navMesh, [entity.col, entity.row], dest)
   if (path.length > 1) {
     entity.path = path
     entity.pathIdx = 1 // skip the starting tile
@@ -207,7 +207,7 @@ export function assignActivityPath(
   }
   // If pathfinding fails, try a random walkable tile
   const fallback = randomWalkableTile(navMesh, entity.row)
-  const fallbackPath = findPath(navMesh, [entity.col, entity.row], fallback)
+  const fallbackPath = findPathChunked(navMesh, [entity.col, entity.row], fallback)
   if (fallbackPath.length > 1) {
     entity.path = fallbackPath
     entity.pathIdx = 1
