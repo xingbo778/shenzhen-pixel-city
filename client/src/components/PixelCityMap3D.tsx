@@ -20,10 +20,7 @@ import { buildNavMesh, randomWalkableTile, findPath } from '@/engine/pathfinder'
 import { createEntity, tickEntity, assignActivityPath } from '@/engine/gameEntity'
 import type { GameEntity } from '@/engine/gameEntity'
 import {
-  preloadAllCharSheets,
-} from '@/engine/charSprites'
-import {
-  preloadVehicleSheets, initVehicles,
+  initVehicles,
 } from '@/engine/vehicleSystem'
 import type { VehicleState } from '@/engine/vehicleSystem'
 import { useGameLoop } from '@/hooks/useGameLoop'
@@ -394,12 +391,6 @@ export default function PixelCityMap3D({
 
     three.render()
   })
-
-  // ── Preload assets ─────────────────────────────────────────────────
-  useEffect(() => {
-    preloadAllCharSheets()
-    preloadVehicleSheets()
-  }, [])
 
   return (
     <div

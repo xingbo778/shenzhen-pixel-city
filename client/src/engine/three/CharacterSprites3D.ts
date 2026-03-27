@@ -113,10 +113,14 @@ const texCache = new Map<string, THREE.Texture>()
 
 function getSheetTexture(sheetKey: string): THREE.Texture {
   if (texCache.has(sheetKey)) return texCache.get(sheetKey)!
-  const img = getImage(CHAR_SHEETS[sheetKey])
-  const tex = new THREE.Texture(img ?? document.createElement('canvas'))
+  const img = preloadImage(CHAR_SHEETS[sheetKey])
+  const tex = new THREE.Texture(img)
   tex.colorSpace = THREE.SRGBColorSpace
-  tex.needsUpdate = true
+  tex.userData.ready = false
+  if (img.complete && img.naturalWidth > 0) {
+    tex.needsUpdate = true
+    tex.userData.ready = true
+  }
   texCache.set(sheetKey, tex)
   return tex
 }
@@ -130,6 +134,10 @@ function updateUV(
   const tex = getSheetTexture(sheetKey)
   const img = getImage(CHAR_SHEETS[sheetKey])
   if (!img) return
+  if (!tex.userData.ready && img.complete && img.naturalWidth > 0) {
+    tex.needsUpdate = true
+    tex.userData.ready = true
+  }
 
   const col = FACING_COL[facing] ?? 0
   const row = frame % SHEET_ROWS
@@ -179,8 +187,6 @@ export interface CharacterSprites3DHandle {
 export function createCharacterSprites3D(): CharacterSprites3DHandle {
   const group = new THREE.Group()
   const entries = new Map<string, CharEntry>()
-
-  Object.values(CHAR_SHEETS).forEach(url => preloadImage(url))
 
   function getOrCreate(botId: string, occupation: string, paletteIndex: number): CharEntry {
     if (entries.has(botId)) return entries.get(botId)!
