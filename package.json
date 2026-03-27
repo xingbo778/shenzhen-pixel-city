@@ -10,6 +10,8 @@
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "format": "prettier --write .",
     "textures:ktx2": "node scripts/generate-ktx2-textures.mjs"
   },

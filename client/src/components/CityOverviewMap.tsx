@@ -613,10 +613,35 @@ export default function CityOverviewMap({ world, onLocationSelect }: Props) {
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
+        data-testid="overview-map-canvas"
         className="w-full h-full"
         onMouseMove={handleMouseMove}
         onClick={handleClick}
       />
+      {Object.entries(OVERVIEW_LOCATIONS).map(([key, loc]) => (
+        <button
+          key={key}
+          type="button"
+          data-testid={`overview-hotspot-${key}`}
+          aria-label={loc.label}
+          className="absolute block cursor-pointer bg-transparent border-0 p-0 m-0"
+          style={{
+            left: `${loc.x * 100}%`,
+            top: `${loc.y * 100}%`,
+            width: `${loc.w * 100}%`,
+            height: `${loc.h * 100}%`,
+          }}
+          onMouseEnter={() => {
+            hoveredRef.current = key
+            setHoveredLocation(key)
+          }}
+          onMouseLeave={() => {
+            hoveredRef.current = null
+            setHoveredLocation(null)
+          }}
+          onClick={() => onLocationSelect(key)}
+        />
+      ))}
       {hoveredLocation && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
           <div

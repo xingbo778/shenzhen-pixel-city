@@ -388,6 +388,7 @@ export default function PixelCityMap3D({
   return (
     <div
       ref={containerRef}
+      data-testid="scene-map-container"
       className="relative w-full h-full"
       style={{ background: '#0d1117' }}
     >
@@ -396,6 +397,7 @@ export default function PixelCityMap3D({
       ) : (
         <canvas
           ref={canvasRef}
+          data-testid="scene-3d-canvas"
           className="w-full h-full"
           style={{
             cursor: isDraggingRef.current ? 'grabbing' : 'grab',
@@ -412,6 +414,7 @@ export default function PixelCityMap3D({
       {/* View mode toggle */}
       <div className="absolute top-3 left-3 flex gap-1">
         <Button
+          data-testid="scene-view-3d"
           onClick={() => setViewMode('3d')}
           variant={viewMode === '3d' ? 'secondary' : 'ghost'}
           size="sm"
@@ -420,6 +423,7 @@ export default function PixelCityMap3D({
           3D
         </Button>
         <Button
+          data-testid="scene-view-plan"
           onClick={() => setViewMode('plan')}
           variant={viewMode === 'plan' ? 'secondary' : 'ghost'}
           size="sm"

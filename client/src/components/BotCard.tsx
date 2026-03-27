@@ -28,6 +28,7 @@ export default memo(function BotCard({ botId, bot, isSelected, onClick }: Props)
   return (
     <div
       onClick={onClick}
+      data-testid={`bot-card-${botId}`}
       className={`relative glass-card p-2.5 cursor-pointer select-none transition-all duration-200 ${
         isSelected
           ? "ring-1 shadow-lg"

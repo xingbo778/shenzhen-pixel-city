@@ -21,16 +21,16 @@ interface Props {
 
 export default function RightPanel({ world, moments, selectedLocation, onBotClick }: Props) {
   return (
-    <Tabs defaultValue="events" className="h-full flex flex-col gap-0 glass-panel-solid border-0">
+    <Tabs data-testid="right-panel" defaultValue="events" className="h-full flex flex-col gap-0 glass-panel-solid border-0">
       {/* 标签栏 */}
       <TabsList className="w-full rounded-none border-b border-white/[0.06] bg-transparent h-9 p-0 shrink-0">
-        <TabsTrigger value="events" className="flex-1 rounded-none text-xs gap-1.5 data-[state=active]:bg-white/[0.04] data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary">
+        <TabsTrigger data-testid="tab-events" value="events" className="flex-1 rounded-none text-xs gap-1.5 data-[state=active]:bg-white/[0.04] data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary">
           <Zap className="size-3.5" /> 事件流
         </TabsTrigger>
-        <TabsTrigger value="moments" className="flex-1 rounded-none text-xs gap-1.5 data-[state=active]:bg-white/[0.04] data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary">
+        <TabsTrigger data-testid="tab-moments" value="moments" className="flex-1 rounded-none text-xs gap-1.5 data-[state=active]:bg-white/[0.04] data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary">
           <Smartphone className="size-3.5" /> 朋友圈
         </TabsTrigger>
-        <TabsTrigger value="location" className="flex-1 rounded-none text-xs gap-1.5 data-[state=active]:bg-white/[0.04] data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary">
+        <TabsTrigger data-testid="tab-location" value="location" className="flex-1 rounded-none text-xs gap-1.5 data-[state=active]:bg-white/[0.04] data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-primary">
           <MapPin className="size-3.5" /> 地点
         </TabsTrigger>
       </TabsList>

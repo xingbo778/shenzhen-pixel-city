@@ -217,6 +217,7 @@ export default function Home() {
               onClick={() => setMapLayer('overview')}
               variant="outline"
               size="sm"
+              data-testid="back-to-overview"
               className="absolute top-2 right-3 z-20 h-7 text-xs backdrop-blur-sm"
             >
               <ArrowLeft className="size-3.5" />
@@ -339,6 +340,7 @@ export default function Home() {
                 <div
                   key={botId}
                   data-botid={botId}
+                  data-testid={`bot-card-shell-${botId}`}
                   ref={el => { botCardRefs.current[botId] = el; }}
                   style={{ minHeight: 80 }}
                 >
@@ -365,6 +367,7 @@ export default function Home() {
           {/* Bot 详情面板 */}
           {showBotDetail && selectedBot && (
             <div
+              data-testid="bot-detail-panel"
               className="shrink-0 overflow-hidden border-b border-white/[0.06]"
               style={{ height: "45%" }}
             >

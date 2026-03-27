@@ -136,7 +136,7 @@ export default function BotDetailPanel({ botId, bot, onClose, onSendMessage }: P
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden animate-slide-right glass-panel-solid">
+    <div data-testid="bot-detail-content" className="h-full flex flex-col overflow-hidden animate-slide-right glass-panel-solid">
       {/* 头部 */}
       <div className="flex items-center gap-3 px-3 py-2.5 shrink-0 border-b border-white/[0.08]">
         <div

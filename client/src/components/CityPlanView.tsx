@@ -292,6 +292,7 @@ export default function CityPlanView({ sceneConfig }: Props) {
     <div ref={containerRef} className="relative w-full h-full" style={{ background: '#0d1117' }}>
       <canvas
         ref={canvasRef}
+        data-testid="scene-plan-canvas"
         className="w-full h-full"
         style={{ cursor: dragging.current ? 'grabbing' : 'grab', display: 'block' }}
         onMouseDown={onMouseDown}
