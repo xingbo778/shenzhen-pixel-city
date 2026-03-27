@@ -19,10 +19,6 @@ import { SCENE_CONFIGS } from '@/engine/sceneTiles'
 import { buildNavMesh, randomWalkableTile, findPathChunked } from '@/engine/pathfinder'
 import { createEntity, tickEntity, assignActivityPath } from '@/engine/gameEntity'
 import type { GameEntity } from '@/engine/gameEntity'
-import {
-  initVehicles,
-} from '@/engine/vehicleSystem'
-import type { VehicleState } from '@/engine/vehicleSystem'
 import { useGameLoop } from '@/hooks/useGameLoop'
 
 import { createThreeScene, setCameraTarget } from '@/engine/three/ThreeScene'
@@ -35,8 +31,7 @@ import {
   tickBubbleLabels,
 } from '@/engine/three/CharacterSprites3D'
 import type { CharacterSprites3DHandle, BubbleLabel } from '@/engine/three/CharacterSprites3D'
-import { buildVehicles3D, clearVehicleCache } from '@/engine/three/Vehicles3D'
-import type { Vehicles3DHandle } from '@/engine/three/Vehicles3D'
+import { clearVehicleCache } from '@/engine/three/Vehicles3D'
 import { ChunkRenderManager } from '@/engine/three/ChunkRenderManager'
 import { sceneConfigToWorldChunks } from '@/engine/world/sceneChunks'
 import { DEFAULT_CHUNK_SIZE, worldToChunk } from '@/engine/world/coords'
@@ -72,14 +67,11 @@ export default function PixelCityMap3D({
   const threeRef      = useRef<ThreeSceneHandle | null>(null)
   const chunkRenderManagerRef = useRef<ChunkRenderManager | null>(null)
   const charRef       = useRef<CharacterSprites3DHandle | null>(null)
-  const vehicles3DRef = useRef<Vehicles3DHandle | null>(null)
   const bubblesRef    = useRef<BubbleLabel[]>([])
 
   // Game logic refs (reused from PixelCityMap)
   const entitiesRef   = useRef<Record<string, GameEntity>>({})
-  const vehiclesRef   = useRef<VehicleState[]>([])
   const navMeshRef    = useRef<NavMeshCache>(null)
-  const sceneBuildTokenRef = useRef(0)
   const sceneChunksRef = useRef<Map<string, WorldChunk>>(new Map())
   const chunkTargetSetRef = useRef<string>('')
   const entityChunkIndexRef = useRef(new EntityChunkIndex(DEFAULT_CHUNK_SIZE))
@@ -174,22 +166,11 @@ export default function PixelCityMap3D({
   useEffect(() => {
     if (!threeRef.current || !sceneConfig) return
     const { scene } = threeRef.current
-    const buildToken = ++sceneBuildTokenRef.current
-    let disposed = false
-    const reportBuildError = (label: string, error: unknown) => {
-      if (disposed || buildToken !== sceneBuildTokenRef.current) return
-      console.error(`[PixelCityMap3D] Failed to load ${label}`, error)
-    }
 
     chunkRenderManagerRef.current?.dispose()
     chunkRenderManagerRef.current = null
     clearFurnitureCache()
-    if (vehicles3DRef.current) {
-      scene.remove(vehicles3DRef.current.group)
-      vehicles3DRef.current.dispose()
-      vehicles3DRef.current = null
-      clearVehicleCache()
-    }
+    clearVehicleCache()
 
     // Create sprites handle if needed
     if (!charRef.current) {
@@ -203,16 +184,6 @@ export default function PixelCityMap3D({
     const allKeys = sceneConfig.objects.map(o => o.pngKey).filter((k): k is string => !!k)
     const keys = Array.from(new Set(allKeys))
     preloadBuildings(keys)
-
-    // 3D vehicles on roads (async — loads GLB models)
-    buildVehicles3D(sceneConfig.tilemap, 120).then(v3d => {
-      if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
-        v3d.dispose()
-        return
-      }
-      threeRef.current.scene.add(v3d.group)
-      vehicles3DRef.current = v3d
-    }).catch(error => reportBuildError('vehicles', error))
 
     // Reset camera to map centre
     const cols = sceneConfig.cols
@@ -229,14 +200,7 @@ export default function PixelCityMap3D({
     entityChunkIndexRef.current.clear()
     demoSpawnedRef.current = false
 
-    // Vehicles
-    const botCount = world
-      ? Object.keys(world.bots).filter(id => world.bots[id].status === 'alive').length
-      : 10
-    vehiclesRef.current = initVehicles(activeLocation, botCount, sceneConfig.tilemap)
-
     return () => {
-      disposed = true
       sceneChunksRef.current = new Map()
       chunkTargetSetRef.current = ''
       if (chunkRenderManagerRef.current === manager) {
@@ -399,7 +363,7 @@ export default function PixelCityMap3D({
     })
 
     // Tick 3D vehicles + building LOD
-    vehicles3DRef.current?.tick(dt)
+    chunkRenderManagerRef.current?.tick(dt)
     chunkRenderManagerRef.current?.updateLOD(three.camera)
 
     // Bubble labels

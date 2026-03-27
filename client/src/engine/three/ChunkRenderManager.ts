@@ -3,6 +3,7 @@ import { TILE_SIZE } from '@/engine/three/ThreeScene'
 import { buildTileGrid3D, type TileGrid3DHandle } from '@/engine/three/TileGrid3D'
 import { buildBuildings3D, type Buildings3DHandle } from '@/engine/three/Buildings3D'
 import { buildStreetFurniture3D, type StreetFurniture3DHandle } from '@/engine/three/StreetFurniture3D'
+import { buildVehicles3D, type Vehicles3DHandle } from '@/engine/three/Vehicles3D'
 import { DEFAULT_CHUNK_SIZE, chunkToWorldOrigin } from '@/engine/world/coords'
 import type { WorldChunk } from '@/engine/world/chunks'
 
@@ -13,6 +14,8 @@ export interface ChunkRenderHandle {
   tileGrid: TileGrid3DHandle
   buildings: Buildings3DHandle | null
   furniture: StreetFurniture3DHandle | null
+  vehicles: Vehicles3DHandle | null
+  tick(dt: number): void
   updateLOD(camera: THREE.Camera): void
   dispose(): void
 }
@@ -98,6 +101,13 @@ export class ChunkRenderManager {
     }
   }
 
+  tick(dt: number): void {
+    for (const handle of Array.from(this.handles.values())) {
+      if (!handle.group.visible) continue
+      handle.tick(dt)
+    }
+  }
+
   dispose(): void {
     for (const pending of Array.from(this.pending.values())) {
       pending.cancelled = true
@@ -128,9 +138,12 @@ export async function buildChunkRenderHandle(
     buildBuildings3D(chunk.objects),
     buildStreetFurniture3D(chunk.objects),
   ])
+  const vehicleBudget = Math.max(6, Math.ceil((chunk.cols * chunk.rows) / 96))
+  const vehicles = await buildVehicles3D(chunk.tiles, vehicleBudget)
 
   group.add(buildings.group)
   group.add(furniture.group)
+  group.add(vehicles.group)
 
   return {
     chunkKey: chunk.key,
@@ -139,6 +152,10 @@ export async function buildChunkRenderHandle(
     tileGrid,
     buildings,
     furniture,
+    vehicles,
+    tick(dt: number) {
+      vehicles.tick(dt)
+    },
     updateLOD(camera: THREE.Camera) {
       buildings.updateLOD(camera)
     },
@@ -146,6 +163,7 @@ export async function buildChunkRenderHandle(
       tileGrid.dispose()
       buildings.dispose()
       furniture.dispose()
+      vehicles.dispose()
     },
   }
 }
