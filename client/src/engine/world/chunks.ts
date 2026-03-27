@@ -78,7 +78,7 @@ export function getChunkBoundsByKey(key: string, chunkSize = DEFAULT_CHUNK_SIZE)
 
 export function getChunkDimensions(tiles: TileType[][]): ChunkDimensions {
   const rows = tiles.length
-  const cols = rows > 0 ? tiles[0].length : 0
+  const cols = tiles.reduce((max, row) => Math.max(max, row?.length ?? 0), 0)
   return { cols, rows }
 }
 
@@ -184,7 +184,7 @@ function getOrCreateChunk(
     seed: getChunkSeed(cx, cy, seed),
     cols: 0,
     rows: 0,
-    tiles: Array.from({ length: chunkSize }, () => []),
+    tiles: [],
     objects: [],
     revision,
   }

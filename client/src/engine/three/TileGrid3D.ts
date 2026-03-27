@@ -240,7 +240,7 @@ export interface TileGrid3DHandle {
 export function buildTileGrid3D(tilemap: TileType[][]): TileGrid3DHandle {
   const group  = new THREE.Group()
   const rows   = tilemap.length
-  const cols   = tilemap[0]?.length ?? 0
+  const cols   = tilemap.reduce((max, row) => Math.max(max, row?.length ?? 0), 0)
 
   // Group tiles by type → InstancedMesh per type
   const typeInstances = new Map<TileType, THREE.Matrix4[]>()
@@ -250,6 +250,7 @@ export function buildTileGrid3D(tilemap: TileType[][]): TileGrid3DHandle {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const type = tilemap[r][c]
+      if (!type) continue
       if (!typeInstances.has(type)) typeInstances.set(type, [])
       const m = new THREE.Matrix4()
       m.makeTranslation(
