@@ -40,4 +40,14 @@ describe("EntityChunkIndex", () => {
     index.remove("bot_2");
     expect(index.getIdsInRadius(0, 0, 0)).toEqual([]);
   });
+
+  test("collects entity ids for explicit chunk keys", () => {
+    const index = new EntityChunkIndex(4);
+
+    index.upsert({ id: "a", col: 0, row: 0 });
+    index.upsert({ id: "b", col: 4, row: 0 });
+    index.upsert({ id: "c", col: 8, row: 0 });
+
+    expect(index.getIdsForChunkKeys(["0,0", "2,0"]).sort()).toEqual(["a", "c"]);
+  });
 });

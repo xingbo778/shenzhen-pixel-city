@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { getVisibleVehicleIds, tickVehicles, type VehicleState } from "@/engine/vehicleSystem";
+import { getVisibleVehicleIds, initChunkVehicles, tickVehicles, type VehicleState } from "@/engine/vehicleSystem";
+import type { WorldChunk } from "@/engine/world/chunks";
 
 function createVehicle(id: string, x: number, y: number): VehicleState {
   return {
@@ -15,6 +16,41 @@ function createVehicle(id: string, x: number, y: number): VehicleState {
 }
 
 describe("vehicleSystem viewport scoping", () => {
+  test("initializes vehicles grouped by chunk", () => {
+    const chunks = new Map<string, WorldChunk>([
+      ["0,0", {
+        key: "0,0",
+        cx: 0,
+        cy: 0,
+        seed: 1,
+        cols: 12,
+        rows: 12,
+        tiles: Array.from({ length: 12 }, (_, row) =>
+          Array.from({ length: 12 }, (_, col) => row === 4 ? "road_h" : (col === 7 ? "road_v" : "building"))),
+        objects: [],
+        revision: 0,
+      }],
+      ["1,0", {
+        key: "1,0",
+        cx: 1,
+        cy: 0,
+        seed: 2,
+        cols: 12,
+        rows: 12,
+        tiles: Array.from({ length: 12 }, () => Array.from({ length: 12 }, () => "water")),
+        objects: [],
+        revision: 0,
+      }],
+    ]);
+
+    const grouped = initChunkVehicles("test", 10, chunks, 24, 12, 12);
+
+    expect(grouped.has("0,0")).toBe(true);
+    expect(grouped.has("1,0")).toBe(true);
+    expect((grouped.get("0,0") ?? []).every(vehicle => vehicle.lane.chunkKey === "0,0")).toBe(true);
+    expect((grouped.get("1,0") ?? []).every(vehicle => vehicle.lane.chunkKey === "1,0")).toBe(true);
+  });
+
   test("selects only vehicles near the viewport", () => {
     const vehicles = [
       createVehicle("near", 0.5, 0.5),

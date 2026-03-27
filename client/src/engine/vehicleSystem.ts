@@ -9,6 +9,8 @@ import { preloadImage, getImage, isImageLoaded } from './imageCache'
 import type { ZDrawable } from './types'
 import type { TileType } from './sceneTiles'
 import { extractTrafficLaneSegments } from './roadGraph'
+import { DEFAULT_CHUNK_SIZE } from './world/coords'
+import type { WorldChunk } from './world/chunks'
 
 // ── Types ────────────────────────────────────────────────────────
 export type VehicleType =
@@ -45,6 +47,7 @@ export interface VehicleLane {
   xMin: number
   xMax: number
   dir: 1 | -1
+  chunkKey?: string
 }
 
 export interface VehicleState {
@@ -79,6 +82,37 @@ export function preloadVehicleSheets(): void {
 
 export function initVehicles(location: string, botCount: number, tilemap: TileType[][]): VehicleState[] {
   const lanes = buildVehicleLanes(tilemap)
+  return initVehiclesFromLanes(location, botCount, lanes)
+}
+
+export function initChunkVehicles(
+  location: string,
+  botCount: number,
+  chunks: Map<string, WorldChunk>,
+  worldCols: number,
+  worldRows: number,
+  chunkSize = DEFAULT_CHUNK_SIZE,
+): Map<string, VehicleState[]> {
+  const lanes = buildVehicleLanesForChunks(chunks, worldCols, worldRows, chunkSize)
+  const vehicles = initVehiclesFromLanes(location, botCount, lanes)
+  const vehiclesByChunk = new Map<string, VehicleState[]>()
+
+  vehicles.forEach((vehicle) => {
+    const key = vehicle.lane.chunkKey ?? 'scene'
+    if (!vehiclesByChunk.has(key)) {
+      vehiclesByChunk.set(key, [])
+    }
+    vehiclesByChunk.get(key)?.push(vehicle)
+  })
+
+  return vehiclesByChunk
+}
+
+function initVehiclesFromLanes(
+  location: string,
+  botCount: number,
+  lanes: VehicleLane[],
+): VehicleState[] {
   const vehicles: VehicleState[] = []
   const extraPerLane = Math.floor(botCount / 5)
   lanes.forEach((lane, laneIdx) => {
@@ -142,6 +176,63 @@ function buildVehicleLanes(tilemap: TileType[][]): VehicleLane[] {
       xMin: segment.min / cols,
       xMax: (segment.max + 1) / cols,
       dir,
+    })
+  })
+
+  return lanes
+}
+
+function buildVehicleLanesForChunks(
+  chunks: Map<string, WorldChunk>,
+  worldCols: number,
+  worldRows: number,
+  chunkSize: number,
+): VehicleLane[] {
+  const lanes: VehicleLane[] = []
+
+  Array.from(chunks.values()).forEach((chunk) => {
+    const chunkColOrigin = chunk.cx * chunkSize
+    const chunkRowOrigin = chunk.cy * chunkSize
+    const segments = extractTrafficLaneSegments(chunk.tiles)
+    const roadSegments = segments.filter(segment => segment.surface === 'road')
+    const waterSegments = segments.filter(segment => segment.surface === 'water' && segment.axis === 'h')
+
+    roadSegments.forEach((segment, index) => {
+      const type = pickRoadVehicleType(segment, index)
+      const dir: 1 | -1 = (segment.lanePos + index + chunk.cx + chunk.cy) % 2 === 0 ? 1 : -1
+      if (segment.axis === 'h') {
+        lanes.push({
+          type,
+          y: (chunkRowOrigin + segment.lanePos + 0.5) / worldRows,
+          xMin: (chunkColOrigin + segment.min) / worldCols,
+          xMax: (chunkColOrigin + segment.max + 1) / worldCols,
+          dir,
+          chunkKey: chunk.key,
+        })
+        return
+      }
+
+      lanes.push({
+        type,
+        y: ((chunkRowOrigin + segment.min + chunkRowOrigin + segment.max + 1) / 2) / worldRows,
+        xMin: (chunkColOrigin + segment.lanePos + 0.25) / worldCols,
+        xMax: (chunkColOrigin + segment.lanePos + 0.75) / worldCols,
+        dir,
+        chunkKey: chunk.key,
+      })
+    })
+
+    waterSegments.forEach((segment, index) => {
+      const type = pickWaterVehicleType(index)
+      const dir: 1 | -1 = (segment.lanePos + index + chunk.cx + chunk.cy) % 2 === 0 ? 1 : -1
+      lanes.push({
+        type,
+        y: (chunkRowOrigin + segment.lanePos + 0.5) / worldRows,
+        xMin: (chunkColOrigin + segment.min) / worldCols,
+        xMax: (chunkColOrigin + segment.max + 1) / worldCols,
+        dir,
+        chunkKey: chunk.key,
+      })
     })
   })
 

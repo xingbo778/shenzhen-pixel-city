@@ -26,7 +26,7 @@ import {
 } from '@/engine/charSprites'
 import type { EmotionBubble } from '@/engine/charSprites'
 import {
-  preloadVehicleSheets, initVehicles,
+  preloadVehicleSheets, initChunkVehicles,
   tickAndCollectVehicleDrawables, getVehiclePositions, getVisibleVehicleIds, tickVehicles,
 } from '@/engine/vehicleSystem'
 import type { VehicleState } from '@/engine/vehicleSystem'
@@ -37,6 +37,7 @@ import type { ZDrawable } from '@/engine/types'
 import { DEFAULT_CHUNK_SIZE } from '@/engine/world/coords'
 import { getChunksIntersectingWorldBounds, sceneConfigToWorldChunks } from '@/engine/world/sceneChunks'
 import type { WorldChunk } from '@/engine/world/chunks'
+import { EntityChunkIndex } from '@/engine/world/entityChunks'
 
 const OBJECTS_SHEET_URL    = '/sprites/objects/objects_sheet.png'
 const OBJECTS_MANIFEST_URL = '/sprites/objects/objects_manifest.json'
@@ -59,6 +60,8 @@ export default function PixelCityMap({
   const canvasRef       = useRef<HTMLCanvasElement>(null)
   const entitiesRef     = useRef<Record<string, GameEntity>>({})
   const vehiclesRef     = useRef<VehicleState[]>([])
+  const vehicleChunksRef = useRef<Map<string, VehicleState[]>>(new Map())
+  const entityChunkIndexRef = useRef(new EntityChunkIndex(DEFAULT_CHUNK_SIZE))
   const bubblesRef      = useRef<EmotionBubble[]>([])
   const navMeshRef      = useRef<NavMeshCache>(null)
   const objManifestRef  = useRef<ObjectManifest | null>(null)
@@ -106,11 +109,20 @@ export default function PixelCityMap({
 
   // ── Reset vehicles + pan on location change ───────────────────
   useEffect(() => {
+    sceneChunksRef.current = sceneConfigToWorldChunks(sceneConfig)
     const botCount = world
       ? Object.keys(world.bots).filter(id => world.bots[id].status === 'alive').length
       : 10
-    vehiclesRef.current    = initVehicles(activeLocation, botCount, sceneConfig.tilemap)
-    sceneChunksRef.current = sceneConfigToWorldChunks(sceneConfig)
+    vehicleChunksRef.current = initChunkVehicles(
+      activeLocation,
+      botCount,
+      sceneChunksRef.current,
+      sceneConfig.cols,
+      sceneConfig.rows,
+    )
+    vehiclesRef.current = Array.from(vehicleChunksRef.current.values()).flat()
+    entitiesRef.current = {}
+    entityChunkIndexRef.current.clear()
     panOffsetRef.current   = { x: 0, y: 0 }
   }, [activeLocation])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -137,6 +149,7 @@ export default function PixelCityMap({
         const entity = createEntity(botId, spawn[0], spawn[1], tileSize)
         assignActivityPath(entity, bot.current_activity || bot.occupation || '', tilemap, navMesh)
         entitiesRef.current[botId] = entity
+        entityChunkIndexRef.current.upsert(entity)
       } else {
         const entity   = entitiesRef.current[botId]
         const activity = bot.current_activity || bot.occupation || ''
@@ -161,7 +174,10 @@ export default function PixelCityMap({
 
     // Remove entities for dead / removed bots
     Object.keys(entitiesRef.current).forEach(id => {
-      if (!aliveBotIds.includes(id)) delete entitiesRef.current[id]
+      if (!aliveBotIds.includes(id)) {
+        delete entitiesRef.current[id]
+        entityChunkIndexRef.current.remove(id)
+      }
     })
   }, [world, activeLocation, sceneConfig])
 
@@ -353,14 +369,29 @@ export default function PixelCityMap({
       yMax: (cssH - worldY) / worldH,
     }
     const activeVehicleIds = getVisibleVehicleIds(vehiclesRef.current, vehicleViewport)
-    tickVehicles(vehiclesRef.current, dt, activeVehicleIds)
-    const activeVehicles = vehiclesRef.current.filter(vehicle => activeVehicleIds.has(vehicle.id))
+    const visibleVehicleChunks = visibleChunks.map((chunk) => vehicleChunksRef.current.get(chunk.key) ?? [])
+    const activeVehicles = visibleVehicleChunks.flat().filter(vehicle => activeVehicleIds.has(vehicle.id))
+    const inactiveVehicles = vehiclesRef.current.filter(vehicle => !activeVehicleIds.has(vehicle.id))
+    tickVehicles(activeVehicles, dt, activeVehicleIds)
+    if (tick % 4 === 0) {
+      tickVehicles(inactiveVehicles, dt * 4)
+    }
     tickAndCollectVehicleDrawables(activeVehicles, 0, worldX, worldY, worldW, worldH, cssW, cssH, drawables)
 
     // Layer 4: bot characters
     const vehiclePositions = getVehiclePositions(activeVehicles, worldW, worldH)
     const navMesh          = navMeshRef.current?.ped
-    const activeEntityIds = getVisibleEntityIds(entitiesRef.current, {
+    const chunkScopedEntityIds = new Set(
+      entityChunkIndexRef.current.getIdsForChunkKeys(visibleChunks.map(chunk => chunk.key)),
+    )
+    const chunkScopedEntities: Record<string, GameEntity> = {}
+    Array.from(chunkScopedEntityIds).forEach((id) => {
+      const entity = entitiesRef.current[id]
+      if (entity) {
+        chunkScopedEntities[id] = entity
+      }
+    })
+    const activeEntityIds = getVisibleEntityIds(chunkScopedEntities, {
       minX: -worldX,
       maxX: cssW - worldX,
       minY: -worldY,
@@ -374,6 +405,7 @@ export default function PixelCityMap({
       const shouldTick = isActive || ((tick + i) % 4 === 0)
       if (shouldTick) {
         tickEntity(entity, isActive ? dt : dt * 4, tileSize)
+        entityChunkIndexRef.current.upsert(entity)
       }
 
       if (!navMesh || !sceneConfig || entity.pathIdx < entity.path.length) return

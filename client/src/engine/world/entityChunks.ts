@@ -65,4 +65,14 @@ export class EntityChunkIndex {
     }
     return Array.from(ids)
   }
+
+  getIdsForChunkKeys(keys: string[]): string[] {
+    const ids = new Set<string>()
+    keys.forEach((key) => {
+      const set = this.chunkToIds.get(key)
+      if (!set) return
+      Array.from(set).forEach(id => ids.add(id))
+    })
+    return Array.from(ids)
+  }
 }
