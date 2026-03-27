@@ -11,7 +11,6 @@
 import type { TileType } from './sceneTiles'
 import { TILE_COLORS } from './sceneTiles'
 import type { SceneObject } from './sceneTiles'
-import type { SpriteData } from './spriteSystem'
 
 // ── Tile sheet integration ─────────────────────────────────────────
 

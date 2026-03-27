@@ -108,7 +108,6 @@ export function sliceWorldIntoChunks({
       const wy = origin.wy + row
       const { cx, cy } = worldToChunk(wx, wy, chunkSize)
       const { tx, ty } = worldToLocal(wx, wy, chunkSize)
-      const key = chunkKey(cx, cy)
       const chunk = getOrCreateChunk(chunks, cx, cy, seed, revision, chunkSize)
       if (!chunk.tiles[ty]) {
         chunk.tiles[ty] = []
@@ -171,7 +170,7 @@ function getOrCreateChunk(
   cy: number,
   seed: number,
   revision: number,
-  chunkSize: number,
+  _chunkSize: number,
 ): WorldChunk {
   const key = chunkKey(cx, cy)
   const existing = chunks.get(key)

@@ -266,8 +266,6 @@ export async function buildVehicles3D(
 ): Promise<Vehicles3DHandle> {
   const group = new THREE.Group()
   const vehicles: Vehicle3D[] = []
-  const rows = tilemap.length
-  const cols = tilemap[0]?.length ?? 0
 
   _vseed = 7777
 

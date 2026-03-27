@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MOCK_MOMENTS, MOCK_WORLD } from "@/lib/mockData";
 import Home from "@/pages/Home";
 
-const { refreshMock, useWorldDataMock } = vi.hoisted(() => {
+const { refreshMock, useWorldDataMock, setEngineUrlMock, toastErrorMock } = vi.hoisted(() => {
   const refreshMock = vi.fn();
+  const setEngineUrlMock = vi.fn(() => true);
+  const toastErrorMock = vi.fn();
   const useWorldDataMock = vi.fn(
     (_pollInterval: number, _engineUrl?: string, mode?: "auto" | "real" | "mock") => {
       if (mode === "mock") {
@@ -46,19 +48,28 @@ const { refreshMock, useWorldDataMock } = vi.hoisted(() => {
     }
   );
 
-  return { refreshMock, useWorldDataMock };
+  return { refreshMock, useWorldDataMock, setEngineUrlMock, toastErrorMock };
 });
 
 vi.mock("@/hooks/useWorldData", () => ({
   useWorldData: useWorldDataMock,
   sendMessage: vi.fn().mockResolvedValue(true),
-  setEngineUrl: vi.fn(),
+  setEngineUrl: setEngineUrlMock,
+  normalizeEngineUrl: (url: string) => {
+    try {
+      const normalized = url.trim().replace(/\/$/, "");
+      const parsed = new URL(normalized);
+      return parsed.protocol === "http:" || parsed.protocol === "https:" ? normalized : null;
+    } catch {
+      return null;
+    }
+  },
 }));
 
 vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
-    error: vi.fn(),
+    error: toastErrorMock,
   },
 }));
 
@@ -86,6 +97,8 @@ describe("Home mode states", () => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     refreshMock.mockClear();
     useWorldDataMock.mockClear();
+    setEngineUrlMock.mockClear();
+    toastErrorMock.mockClear();
     window.localStorage.clear();
     class MockIntersectionObserver {
       observe() {}
@@ -146,5 +159,28 @@ describe("Home mode states", () => {
     });
 
     expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("rejects invalid engine url before updating state", async () => {
+    window.localStorage.setItem("szpc.dataSourceMode", "auto");
+
+    await act(async () => {
+      root.render(<Home />);
+    });
+
+    const input = container.querySelector('input[placeholder="http://localhost:8000"]') as HTMLInputElement;
+    const applyButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("应用")
+    ) as HTMLButtonElement;
+
+    await act(async () => {
+      const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+      descriptor?.set?.call(input, "abc");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      applyButton.click();
+    });
+
+    expect(toastErrorMock).toHaveBeenCalledWith("请输入有效的 world_engine 地址");
+    expect(setEngineUrlMock).not.toHaveBeenCalledWith("abc");
   });
 });

@@ -60,8 +60,8 @@ export const TILE_COLORS: Record<TileType, { base: string; detail?: string; line
 const _ = ''
 
 const R  : TileType = 'road_h'
-const V  : TileType = 'road_v'
-const X  : TileType = 'road_cross'
+const _V : TileType = 'road_v'
+const _X : TileType = 'road_cross'
 const S  : TileType = 'sidewalk'
 const E  : TileType = 'sidewalk_edge'
 const G  : TileType = 'grass'
@@ -75,7 +75,7 @@ const PP : TileType = 'park_path'
 const FG : TileType = 'fence_green'
 const AL : TileType = 'alley'
 
-const VILLAGE_MAP: TileType[][] = [
+const _VILLAGE_MAP: TileType[][] = [
   [B, B, B, B, B, B, B, B, B, B, B, B, AL, AL, B, B, B, B, B, B, B, B, B, B, B, B, AL, AL, B, B, B, B, B, B, B, B],
   [B, B, B, B, B, B, B, B, B, B, B, B, AL, AL, B, B, B, B, B, B, B, B, B, B, B, B, AL, AL, B, B, B, B, B, B, B, B],
   [B, B, B, B, B, B, B, B, B, B, B, B, AL, AL, B, B, B, B, B, B, B, B, B, B, B, B, AL, AL, B, B, B, B, B, B, B, B],
@@ -102,7 +102,7 @@ const VILLAGE_MAP: TileType[][] = [
   [G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G, G]
 ]
 
-const TECH_MAP: TileType[][] = [
+const _TECH_MAP: TileType[][] = [
   [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
   [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
   [B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B],
@@ -253,7 +253,7 @@ export const VILLAGE_BUILDING: SpriteData = (() => {
   const WD = '#A8A898'  // 外墙深色
   const WS = '#B8B8A8'  // 外墙中间色
   const WN = '#989888'  // 外墙污迹
-  const WT = '#D8D8C8'  // 外墙高光
+  const _WT = '#D8D8C8'  // 外墙高光
   const WI = '#4A6080'  // 窗户玻璃（深蓝灰）
   const WF = '#3A5070'  // 窗框
   const WH = '#6A90B0'  // 窗户高光
@@ -331,8 +331,8 @@ export const OFFICE_TOWER: SpriteData = (() => {
   const RS = '#445566'
   const AC = '#E0E8F0'
   const AG = '#C0C8D0'
-  const AB = '#A0A8B0'
-  const LB = '#FFEE88'  // 大堂灯光
+  const _AB = '#A0A8B0'
+  const _LB = '#FFEE88'  // 大堂灯光
 
   const rows: string[][] = []
 
@@ -538,7 +538,7 @@ export const CONVENIENCE_STORE: SpriteData = (() => {
   const WL = '#EEEEEE'
   const WD = '#CCCCCC'
   const RC = '#EE3333'
-  const RD = '#BB1111'
+  const _RD = '#BB1111'
   const YL = '#FFEE44'
   const GL = '#88CCFF'
   const GD = '#5599CC'
