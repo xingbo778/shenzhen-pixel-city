@@ -26,9 +26,23 @@ export interface ChunkedPathOptions {
   chunkPadding?: number
 }
 
-interface ChunkGraph {
+interface PortalNode {
+  id: string
+  chunkKey: string
+  col: number
+  row: number
+}
+
+interface PortalLink {
+  targetId: string
+  cost: number
+}
+
+interface ChunkPortalGraph {
   chunkSize: number
-  neighbors: Map<string, string[]>
+  nodes: Map<string, PortalNode>
+  links: Map<string, PortalLink[]>
+  chunkNodes: Map<string, string[]>
 }
 
 const PEDESTRIAN_WALKABLE = new Set<TileType>([
@@ -72,6 +86,7 @@ interface Node {
   g: number
   f: number
   parent: Node | null
+  portalId?: string
 }
 
 class MinHeap {
@@ -147,9 +162,9 @@ function prunePathCache() {
 
 // ── Chunk graph cache ────────────────────────────────────────────
 
-const CHUNK_GRAPH_CACHE = new WeakMap<boolean[][], Map<number, ChunkGraph>>()
+const CHUNK_GRAPH_CACHE = new WeakMap<boolean[][], Map<number, ChunkPortalGraph>>()
 
-function getChunkGraph(mesh: boolean[][], chunkSize: number): ChunkGraph {
+function getChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph {
   let perMesh = CHUNK_GRAPH_CACHE.get(mesh)
   if (!perMesh) {
     perMesh = new Map()
@@ -164,55 +179,151 @@ function getChunkGraph(mesh: boolean[][], chunkSize: number): ChunkGraph {
   return graph
 }
 
-function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkGraph {
-  const neighbors = new Map<string, Set<string>>()
+function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph {
   const rows = mesh.length
   const cols = mesh[0]?.length ?? 0
+  const nodes = new Map<string, PortalNode>()
+  const links = new Map<string, PortalLink[]>()
+  const chunkNodes = new Map<string, string[]>()
+  let nextPortalId = 0
 
-  const ensureChunk = (key: string) => {
-    if (!neighbors.has(key)) {
-      neighbors.set(key, new Set())
+  const ensureNodeBucket = (chunk: string) => {
+    if (!chunkNodes.has(chunk)) {
+      chunkNodes.set(chunk, [])
     }
   }
 
-  const connectChunks = (a: string, b: string) => {
-    ensureChunk(a)
-    ensureChunk(b)
-    neighbors.get(a)?.add(b)
-    neighbors.get(b)?.add(a)
+  const addNode = (chunk: string, col: number, row: number): string => {
+    const id = `portal_${nextPortalId++}`
+    nodes.set(id, { id, chunkKey: chunk, col, row })
+    links.set(id, [])
+    ensureNodeBucket(chunk)
+    chunkNodes.get(chunk)?.push(id)
+    return id
   }
 
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      if (!mesh[row][col]) continue
-      const current = chunkKey(
-        worldToChunk(col, row, chunkSize).cx,
-        worldToChunk(col, row, chunkSize).cy,
-      )
-      ensureChunk(current)
+  const addLink = (fromId: string, targetId: string, cost: number) => {
+    links.get(fromId)?.push({ targetId, cost })
+  }
 
-      for (const [dc, dr] of [[1, 0], [0, 1]] as [number, number][]) {
-        const nextCol = col + dc
-        const nextRow = row + dr
-        if (nextRow >= rows || nextCol >= cols || !mesh[nextRow][nextCol]) continue
+  const connect = (aId: string, bId: string, cost: number) => {
+    addLink(aId, bId, cost)
+    addLink(bId, aId, cost)
+  }
 
-        const targetCoord = worldToChunk(nextCol, nextRow, chunkSize)
-        const target = chunkKey(targetCoord.cx, targetCoord.cy)
-        if (target !== current) {
-          connectChunks(current, target)
+  const addPortalPair = (
+    aChunk: string,
+    aCol: number,
+    aRow: number,
+    bChunk: string,
+    bCol: number,
+    bRow: number,
+  ) => {
+    const aId = addNode(aChunk, aCol, aRow)
+    const bId = addNode(bChunk, bCol, bRow)
+    connect(aId, bId, 1)
+  }
+
+  for (let boundaryCol = 0; boundaryCol < cols - 1; boundaryCol++) {
+    let row = 0
+    while (row < rows) {
+      if (!mesh[row][boundaryCol] || !mesh[row][boundaryCol + 1]) {
+        row++
+        continue
+      }
+
+      const leftChunkCoord = worldToChunk(boundaryCol, row, chunkSize)
+      const rightChunkCoord = worldToChunk(boundaryCol + 1, row, chunkSize)
+      const leftChunk = chunkKey(leftChunkCoord.cx, leftChunkCoord.cy)
+      const rightChunk = chunkKey(rightChunkCoord.cx, rightChunkCoord.cy)
+
+      if (leftChunk === rightChunk) {
+        row++
+        continue
+      }
+
+      const startRow = row
+      row++
+      while (row < rows) {
+        if (!mesh[row][boundaryCol] || !mesh[row][boundaryCol + 1]) break
+        const nextLeft = worldToChunk(boundaryCol, row, chunkSize)
+        const nextRight = worldToChunk(boundaryCol + 1, row, chunkSize)
+        if (
+          nextLeft.cx !== leftChunkCoord.cx ||
+          nextLeft.cy !== leftChunkCoord.cy ||
+          nextRight.cx !== rightChunkCoord.cx ||
+          nextRight.cy !== rightChunkCoord.cy
+        ) {
+          break
         }
+        row++
+      }
+
+      const endRow = row - 1
+      const midRow = startRow + Math.floor((endRow - startRow) / 2)
+      addPortalPair(leftChunk, boundaryCol, midRow, rightChunk, boundaryCol + 1, midRow)
+    }
+  }
+
+  for (let boundaryRow = 0; boundaryRow < rows - 1; boundaryRow++) {
+    let col = 0
+    while (col < cols) {
+      if (!mesh[boundaryRow][col] || !mesh[boundaryRow + 1][col]) {
+        col++
+        continue
+      }
+
+      const topChunkCoord = worldToChunk(col, boundaryRow, chunkSize)
+      const bottomChunkCoord = worldToChunk(col, boundaryRow + 1, chunkSize)
+      const topChunk = chunkKey(topChunkCoord.cx, topChunkCoord.cy)
+      const bottomChunk = chunkKey(bottomChunkCoord.cx, bottomChunkCoord.cy)
+
+      if (topChunk === bottomChunk) {
+        col++
+        continue
+      }
+
+      const startCol = col
+      col++
+      while (col < cols) {
+        if (!mesh[boundaryRow][col] || !mesh[boundaryRow + 1][col]) break
+        const nextTop = worldToChunk(col, boundaryRow, chunkSize)
+        const nextBottom = worldToChunk(col, boundaryRow + 1, chunkSize)
+        if (
+          nextTop.cx !== topChunkCoord.cx ||
+          nextTop.cy !== topChunkCoord.cy ||
+          nextBottom.cx !== bottomChunkCoord.cx ||
+          nextBottom.cy !== bottomChunkCoord.cy
+        ) {
+          break
+        }
+        col++
+      }
+
+      const endCol = col - 1
+      const midCol = startCol + Math.floor((endCol - startCol) / 2)
+      addPortalPair(topChunk, midCol, boundaryRow, bottomChunk, midCol, boundaryRow + 1)
+    }
+  }
+
+  chunkNodes.forEach((portalIds) => {
+    for (let i = 0; i < portalIds.length; i++) {
+      const fromNode = nodes.get(portalIds[i])
+      if (!fromNode) continue
+      for (let j = i + 1; j < portalIds.length; j++) {
+        const toNode = nodes.get(portalIds[j])
+        if (!toNode) continue
+        const cost = heuristic(fromNode.col, fromNode.row, toNode.col, toNode.row)
+        connect(fromNode.id, toNode.id, cost)
       }
     }
-  }
-
-  const normalizedNeighbors = new Map<string, string[]>()
-  neighbors.forEach((adjacent, key) => {
-    normalizedNeighbors.set(key, Array.from(adjacent))
   })
 
   return {
     chunkSize,
-    neighbors: normalizedNeighbors,
+    nodes,
+    links,
+    chunkNodes,
   }
 }
 
@@ -336,13 +447,14 @@ function findPathInternal(
       if (previousG !== undefined && nextG >= previousG) continue
 
       gMap.set(nextKey, nextG)
-      open.push({
-        col: nextCol,
-        row: nextRow,
-        g: nextG,
-        f: nextG + heuristic(nextCol, nextRow, tc, tr),
-        parent: current,
-      })
+    open.push({
+      col: nextCol,
+      row: nextRow,
+      g: nextG,
+      f: nextG + heuristic(nextCol, nextRow, tc, tr),
+      parent: current,
+      portalId: undefined,
+    })
     }
   }
 
@@ -350,53 +462,121 @@ function findPathInternal(
   return []
 }
 
+interface PortalRoute {
+  chunkKeys: string[]
+}
+
 function findChunkRoute(
   mesh: boolean[][],
   from: [number, number],
   to: [number, number],
   chunkSize: number,
-): string[] | null {
+): PortalRoute | null {
   const graph = getChunkGraph(mesh, chunkSize)
   const fromChunk = worldToChunk(from[0], from[1], chunkSize)
   const toChunk = worldToChunk(to[0], to[1], chunkSize)
   const startKey = chunkKey(fromChunk.cx, fromChunk.cy)
   const endKey = chunkKey(toChunk.cx, toChunk.cy)
 
-  if (startKey === endKey) return [startKey]
+  if (startKey === endKey) {
+    return { chunkKeys: [startKey] }
+  }
 
-  if (!graph.neighbors.has(startKey) || !graph.neighbors.has(endKey)) {
+  const startPortals = graph.chunkNodes.get(startKey) ?? []
+  const endPortals = graph.chunkNodes.get(endKey) ?? []
+  if (startPortals.length === 0 || endPortals.length === 0) {
     return null
   }
 
-  const queue = [startKey]
-  const visited = new Set<string>([startKey])
+  const endPortalSet = new Set(endPortals)
+  const endNodes = endPortals
+    .map(id => graph.nodes.get(id))
+    .filter((node): node is PortalNode => Boolean(node))
+
+  const open = new MinHeap()
+  const best = new Map<string, number>()
   const parents = new Map<string, string | null>()
-  parents.set(startKey, null)
 
-  while (queue.length > 0) {
-    const current = queue.shift()
+  startPortals.forEach((portalId) => {
+    const portal = graph.nodes.get(portalId)
+    if (!portal) return
+    const g = heuristic(from[0], from[1], portal.col, portal.row)
+    const h = getPortalHeuristic(portal, endNodes)
+    open.push({ col: portal.col, row: portal.row, g, f: g + h, parent: null, portalId })
+    best.set(portalId, g)
+    parents.set(portalId, null)
+  })
+
+  const closed = new Set<string>()
+  let targetPortalId: string | null = null
+
+  while (open.length > 0) {
+    const current = open.pop()
     if (!current) break
-    if (current === endKey) break
 
-    const adjacent = graph.neighbors.get(current) ?? []
-    adjacent.forEach((next) => {
-      if (visited.has(next)) return
-      visited.add(next)
-      parents.set(next, current)
-      queue.push(next)
+    const currentId = current.portalId ?? null
+    if (!currentId) continue
+    if (closed.has(currentId)) continue
+
+    if (endPortalSet.has(currentId)) {
+      targetPortalId = currentId
+      break
+    }
+
+    closed.add(currentId)
+    const neighbors = graph.links.get(currentId) ?? []
+    neighbors.forEach(({ targetId, cost }) => {
+      if (closed.has(targetId)) return
+      const target = graph.nodes.get(targetId)
+      if (!target) return
+      const nextG = (best.get(currentId) ?? 0) + cost
+      const prevBest = best.get(targetId)
+      if (prevBest !== undefined && nextG >= prevBest) return
+      best.set(targetId, nextG)
+      parents.set(targetId, currentId)
+      open.push({
+        col: target.col,
+        row: target.row,
+        g: nextG,
+        f: nextG + getPortalHeuristic(target, endNodes),
+        parent: null,
+        portalId: targetId,
+      })
     })
   }
 
-  if (!parents.has(endKey)) return null
+  if (!targetPortalId) return null
 
-  const route: string[] = []
-  let cursor: string | null = endKey
+  const portalPath: string[] = []
+  let cursor: string | null = targetPortalId
   while (cursor) {
-    route.push(cursor)
+    portalPath.push(cursor)
     cursor = parents.get(cursor) ?? null
   }
-  route.reverse()
-  return route
+  portalPath.reverse()
+
+  const routeChunks: string[] = [startKey]
+  portalPath.forEach((portalId) => {
+    const node = graph.nodes.get(portalId)
+    if (!node) return
+    if (routeChunks[routeChunks.length - 1] !== node.chunkKey) {
+      routeChunks.push(node.chunkKey)
+    }
+  })
+  if (routeChunks[routeChunks.length - 1] !== endKey) {
+    routeChunks.push(endKey)
+  }
+
+  return { chunkKeys: routeChunks }
+}
+
+function getPortalHeuristic(portal: PortalNode, endNodes: PortalNode[]): number {
+  if (endNodes.length === 0) return 0
+  let best = Infinity
+  endNodes.forEach((endNode) => {
+    best = Math.min(best, heuristic(portal.col, portal.row, endNode.col, endNode.row))
+  })
+  return best
 }
 
 function getBoundsForChunkRoute(
@@ -485,8 +665,8 @@ export function findPathChunked(
   }
 
   const route = findChunkRoute(mesh, from, to, chunkSize)
-  if (route && route.length > 0) {
-    const bounds = getBoundsForChunkRoute(mesh, route, chunkSize, chunkPadding)
+  if (route && route.chunkKeys.length > 0) {
+    const bounds = getBoundsForChunkRoute(mesh, route.chunkKeys, chunkSize, chunkPadding)
     const boundedPath = findPathInternal(mesh, from, to, bounds)
     if (boundedPath.length > 0) {
       return boundedPath
