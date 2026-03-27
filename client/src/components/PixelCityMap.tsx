@@ -18,7 +18,7 @@ import { SCENE_CONFIGS } from '@/engine/sceneTiles'
 import { renderTileMap, renderSceneObjects, TILE_SHEET_URL } from '@/engine/tileRenderer'
 import type { ObjectManifest } from '@/engine/tileRenderer'
 import { buildNavMesh, randomWalkableTile } from '@/engine/pathfinder'
-import { createEntity, tickEntity, assignActivityPath } from '@/engine/gameEntity'
+import { createEntity, tickEntity, assignActivityPath, getVisibleEntityIds } from '@/engine/gameEntity'
 import type { GameEntity } from '@/engine/gameEntity'
 import {
   preloadAllCharSheets, collectBotDrawables, tickAndCollectBubbleDrawables,
@@ -339,11 +339,31 @@ export default function PixelCityMap({
     // Layer 4: bot characters
     const vehiclePositions = getVehiclePositions(activeVehicles, worldW, worldH)
     const navMesh          = navMeshRef.current?.ped
+    const activeEntityIds = getVisibleEntityIds(entitiesRef.current, {
+      minX: -worldX,
+      maxX: cssW - worldX,
+      minY: -worldY,
+      maxY: cssH - worldY,
+    }, tileSize * 2)
+    const activeEntities = Object.entries(entitiesRef.current)
+      .filter(([botId]) => activeEntityIds.has(botId))
 
     Object.entries(entitiesRef.current).forEach(([botId, entity], i) => {
-      tickEntity(entity, dt, tileSize)
+      const isActive = activeEntityIds.has(botId)
+      const shouldTick = isActive || ((tick + i) % 4 === 0)
+      if (shouldTick) {
+        tickEntity(entity, isActive ? dt : dt * 4, tileSize)
+      }
 
-      // Vehicle collision avoidance
+      if (!navMesh || !sceneConfig || entity.pathIdx < entity.path.length) return
+      if (isActive || ((tick + i) % 24 === 0)) {
+        const bot      = world?.bots[botId]
+        const activity = bot?.current_activity || bot?.occupation || ''
+        assignActivityPath(entity, activity, sceneConfig.tilemap, navMesh)
+      }
+    })
+
+    activeEntities.forEach(([botId, entity], i) => {
       for (const vp of vehiclePositions) {
         if (vp.radius <= 0) continue
         const edx  = entity.pixelX - vp.x
@@ -357,9 +377,8 @@ export default function PixelCityMap({
         }
       }
 
-      // Entity–entity repulsion
-      for (const [otherId, other] of Object.entries(entitiesRef.current)) {
-        if (otherId === botId) continue
+      activeEntities.forEach(([otherId, other]) => {
+        if (otherId === botId) return
         const edx  = entity.pixelX - other.pixelX
         const edy  = entity.pixelY - other.pixelY
         const dist = Math.sqrt(edx * edx + edy * edy)
@@ -369,14 +388,7 @@ export default function PixelCityMap({
           entity.pixelX += (edx / dist) * push
           entity.pixelY += (edy / dist) * push
         }
-      }
-
-      // Re-plan exhausted paths
-      if (entity.pathIdx >= entity.path.length && navMesh && sceneConfig) {
-        const bot      = world?.bots[botId]
-        const activity = bot?.current_activity || bot?.occupation || ''
-        assignActivityPath(entity, activity, sceneConfig.tilemap, navMesh)
-      }
+      })
 
       collectBotDrawables(
         botId, entity, world, i % 10,

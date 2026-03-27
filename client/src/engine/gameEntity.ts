@@ -24,6 +24,13 @@ export interface GameEntity {
   isBoat: boolean
 }
 
+export interface EntityViewport {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+}
+
 const WALK_SPEED = 2.8       // tiles per second
 const FRAME_DURATION = 0.14  // seconds per animation frame
 const BOAT_SPEED = 1.4
@@ -106,6 +113,25 @@ export function createEntity(
     activity: '',
     isBoat,
   }
+}
+
+export function getVisibleEntityIds(
+  entities: Record<string, GameEntity>,
+  viewport: EntityViewport,
+  margin = 0,
+): Set<string> {
+  const active = new Set<string>()
+  Object.entries(entities).forEach(([id, entity]) => {
+    if (
+      entity.pixelX >= viewport.minX - margin &&
+      entity.pixelX <= viewport.maxX + margin &&
+      entity.pixelY >= viewport.minY - margin &&
+      entity.pixelY <= viewport.maxY + margin
+    ) {
+      active.add(id)
+    }
+  })
+  return active
 }
 
 // ── Activity → destination tile mapping ─────────────────────────
