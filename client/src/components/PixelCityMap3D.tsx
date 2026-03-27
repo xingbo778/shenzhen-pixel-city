@@ -27,12 +27,8 @@ import { useGameLoop } from '@/hooks/useGameLoop'
 
 import { createThreeScene, setCameraTarget } from '@/engine/three/ThreeScene'
 import type { ThreeSceneHandle }   from '@/engine/three/ThreeScene'
-import { buildTileGrid3D }         from '@/engine/three/TileGrid3D'
-import type { TileGrid3DHandle }   from '@/engine/three/TileGrid3D'
-import { buildBuildings3D, initBuildingTextureLoader, preloadBuildings } from '@/engine/three/Buildings3D'
-import type { Buildings3DHandle }  from '@/engine/three/Buildings3D'
-import { buildStreetFurniture3D, clearFurnitureCache }  from '@/engine/three/StreetFurniture3D'
-import type { StreetFurniture3DHandle } from '@/engine/three/StreetFurniture3D'
+import { initBuildingTextureLoader, preloadBuildings } from '@/engine/three/Buildings3D'
+import { clearFurnitureCache }  from '@/engine/three/StreetFurniture3D'
 import {
   createCharacterSprites3D,
   createBubbleLabel,
@@ -41,7 +37,8 @@ import {
 import type { CharacterSprites3DHandle, BubbleLabel } from '@/engine/three/CharacterSprites3D'
 import { buildVehicles3D, clearVehicleCache } from '@/engine/three/Vehicles3D'
 import type { Vehicles3DHandle } from '@/engine/three/Vehicles3D'
-import { TILE_SIZE } from '@/engine/three/ThreeScene'
+import { ChunkRenderManager } from '@/engine/three/ChunkRenderManager'
+import { sceneConfigToWorldChunks } from '@/engine/world/sceneChunks'
 import CityPlanView from './CityPlanView'
 import { Button } from '@/components/ui/button'
 
@@ -67,9 +64,7 @@ export default function PixelCityMap3D({
 
   // Three.js handles
   const threeRef      = useRef<ThreeSceneHandle | null>(null)
-  const tileGridRef   = useRef<TileGrid3DHandle | null>(null)
-  const buildingsRef  = useRef<Buildings3DHandle | null>(null)
-  const furnitureRef  = useRef<StreetFurniture3DHandle | null>(null)
+  const chunkRenderManagerRef = useRef<ChunkRenderManager | null>(null)
   const charRef       = useRef<CharacterSprites3DHandle | null>(null)
   const vehicles3DRef = useRef<Vehicles3DHandle | null>(null)
   const bubblesRef    = useRef<BubbleLabel[]>([])
@@ -119,12 +114,14 @@ export default function PixelCityMap3D({
     three.resize(w, h)
 
     return () => {
+      chunkRenderManagerRef.current?.dispose()
+      chunkRenderManagerRef.current = null
       three.dispose()
       threeRef.current = null
     }
   }, [])
 
-  // ── Rebuild tile grid + buildings on location change ───────────────
+  // ── Rebuild chunked world renderables on location change ───────────
   useEffect(() => {
     if (!threeRef.current || !sceneConfig) return
     const { scene } = threeRef.current
@@ -135,23 +132,9 @@ export default function PixelCityMap3D({
       console.error(`[PixelCityMap3D] Failed to load ${label}`, error)
     }
 
-    // Remove old grid / buildings
-    if (tileGridRef.current) {
-      scene.remove(tileGridRef.current.group)
-      tileGridRef.current.dispose()
-      tileGridRef.current = null
-    }
-    if (buildingsRef.current) {
-      scene.remove(buildingsRef.current.group)
-      buildingsRef.current.dispose()
-      buildingsRef.current = null
-    }
-    if (furnitureRef.current) {
-      scene.remove(furnitureRef.current.group)
-      furnitureRef.current.dispose()
-      furnitureRef.current = null
-      clearFurnitureCache()
-    }
+    chunkRenderManagerRef.current?.dispose()
+    chunkRenderManagerRef.current = null
+    clearFurnitureCache()
     if (vehicles3DRef.current) {
       scene.remove(vehicles3DRef.current.group)
       vehicles3DRef.current.dispose()
@@ -165,34 +148,15 @@ export default function PixelCityMap3D({
       scene.add(charRef.current.group)
     }
 
-    // Tile grid
-    const tileGrid = buildTileGrid3D(sceneConfig.tilemap)
-    scene.add(tileGrid.group)
-    tileGridRef.current = tileGrid
+    const manager = new ChunkRenderManager(scene)
+    chunkRenderManagerRef.current = manager
 
-    // Buildings (async)
     const allKeys = sceneConfig.objects.map(o => o.pngKey).filter((k): k is string => !!k)
     const keys = Array.from(new Set(allKeys))
     preloadBuildings(keys)
 
-    buildBuildings3D(sceneConfig.objects).then(bldgs => {
-      if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
-        bldgs.dispose()
-        return
-      }
-      threeRef.current.scene.add(bldgs.group)
-      buildingsRef.current = bldgs
-    }).catch(error => reportBuildError('buildings', error))
-
-    // Street furniture (trees, traffic lights, signs, etc.)
-    buildStreetFurniture3D(sceneConfig.objects).then(furn => {
-      if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
-        furn.dispose()
-        return
-      }
-      threeRef.current.scene.add(furn.group)
-      furnitureRef.current = furn
-    }).catch(error => reportBuildError('street furniture', error))
+    const chunks = Array.from(sceneConfigToWorldChunks(sceneConfig).values())
+    manager.setVisibleChunks(chunks).catch(error => reportBuildError('chunk renderables', error))
 
     // 3D vehicles on roads (async — loads GLB models)
     buildVehicles3D(sceneConfig.tilemap, 120).then(v3d => {
@@ -223,6 +187,10 @@ export default function PixelCityMap3D({
 
     return () => {
       disposed = true
+      if (chunkRenderManagerRef.current === manager) {
+        chunkRenderManagerRef.current.dispose()
+        chunkRenderManagerRef.current = null
+      }
     }
   }, [activeLocation])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -368,7 +336,7 @@ export default function PixelCityMap3D({
 
     // Tick 3D vehicles + building LOD
     vehicles3DRef.current?.tick(dt)
-    buildingsRef.current?.updateLOD(three.camera)
+    chunkRenderManagerRef.current?.updateLOD(three.camera)
 
     // Bubble labels
     bubblesRef.current = tickBubbleLabels(
