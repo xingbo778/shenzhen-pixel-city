@@ -39,12 +39,15 @@ import { buildVehicles3D, clearVehicleCache } from '@/engine/three/Vehicles3D'
 import type { Vehicles3DHandle } from '@/engine/three/Vehicles3D'
 import { ChunkRenderManager } from '@/engine/three/ChunkRenderManager'
 import { sceneConfigToWorldChunks } from '@/engine/world/sceneChunks'
+import { DEFAULT_CHUNK_SIZE, worldToChunk } from '@/engine/world/coords'
+import { getChunkKeysInRadius, type WorldChunk } from '@/engine/world/chunks'
 import CityPlanView from './CityPlanView'
 import { Button } from '@/components/ui/button'
 
 // ── Constants ──────────────────────────────────────────────────────────
 // Approximate game-loop tile size in CSS pixels (used for entity <-> world mapping)
 const VIRTUAL_TILE_PX = 32
+const CHUNK_RENDER_RADIUS = 1
 
 interface Props {
   world: WorldState | null
@@ -74,6 +77,8 @@ export default function PixelCityMap3D({
   const vehiclesRef   = useRef<VehicleState[]>([])
   const navMeshRef    = useRef<NavMeshCache>(null)
   const sceneBuildTokenRef = useRef(0)
+  const sceneChunksRef = useRef<Map<string, WorldChunk>>(new Map())
+  const visibleChunkSetRef = useRef<string>('')
 
   // Camera pan / zoom
   const zoomRef       = useRef(1.0)
@@ -87,6 +92,23 @@ export default function PixelCityMap3D({
   const activeLocation = currentLocation || SCENE_NAMES[0]
   const meta           = SCENE_META[activeLocation] || SCENE_META['南山科技园']
   const sceneConfig    = SCENE_CONFIGS[activeLocation]
+
+  const updateVisibleChunks = useCallback((col: number, row: number) => {
+    const manager = chunkRenderManagerRef.current
+    if (!manager || sceneChunksRef.current.size === 0) return
+
+    const centerChunk = worldToChunk(Math.floor(col), Math.floor(row), DEFAULT_CHUNK_SIZE)
+    const visibleKeys = getChunkKeysInRadius(centerChunk, CHUNK_RENDER_RADIUS)
+      .filter(key => sceneChunksRef.current.has(key))
+      .sort()
+    const nextKey = visibleKeys.join('|')
+    if (nextKey === visibleChunkSetRef.current) return
+    visibleChunkSetRef.current = nextKey
+    const visibleChunks = visibleKeys
+      .map(key => sceneChunksRef.current.get(key))
+      .filter((chunk): chunk is WorldChunk => !!chunk)
+    void manager.setVisibleChunks(visibleChunks)
+  }, [])
 
   // ── Nav mesh ──────────────────────────────────────────────────────
   if (!navMeshRef.current || navMeshRef.current.loc !== activeLocation) {
@@ -155,9 +177,6 @@ export default function PixelCityMap3D({
     const keys = Array.from(new Set(allKeys))
     preloadBuildings(keys)
 
-    const chunks = Array.from(sceneConfigToWorldChunks(sceneConfig).values())
-    manager.setVisibleChunks(chunks).catch(error => reportBuildError('chunk renderables', error))
-
     // 3D vehicles on roads (async — loads GLB models)
     buildVehicles3D(sceneConfig.tilemap, 120).then(v3d => {
       if (!threeRef.current || disposed || buildToken !== sceneBuildTokenRef.current) {
@@ -174,6 +193,9 @@ export default function PixelCityMap3D({
     panColRef.current = cols / 2
     panRowRef.current = rows / 2
     zoomRef.current   = 1.0
+    sceneChunksRef.current = sceneConfigToWorldChunks(sceneConfig)
+    visibleChunkSetRef.current = ''
+    updateVisibleChunks(panColRef.current, panRowRef.current)
 
     // Reset entities for new location
     entitiesRef.current = {}
@@ -187,12 +209,14 @@ export default function PixelCityMap3D({
 
     return () => {
       disposed = true
+      sceneChunksRef.current = new Map()
+      visibleChunkSetRef.current = ''
       if (chunkRenderManagerRef.current === manager) {
         chunkRenderManagerRef.current.dispose()
         chunkRenderManagerRef.current = null
       }
     }
-  }, [activeLocation])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeLocation, updateVisibleChunks])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Entity sync (real bots + demo fallback) ─────────────────────────
   const demoSpawnedRef = useRef(false)
@@ -355,6 +379,7 @@ export default function PixelCityMap3D({
     const rows = sc.rows
     const col  = Math.max(0, Math.min(cols - 1, panColRef.current))
     const row  = Math.max(0, Math.min(rows - 1, panRowRef.current))
+    updateVisibleChunks(col, row)
     setCameraTarget(three.camera, col, row, zoomRef.current)
 
     three.render()
