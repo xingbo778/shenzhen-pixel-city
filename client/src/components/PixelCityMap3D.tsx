@@ -11,10 +11,10 @@
  * reused unchanged from the 2D engine.
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import type { WorldState } from '@/types/world'
 import { getDominantEmotion } from '@/types/world'
-import { SCENE_META, SCENE_NAMES, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/config/scenes'
+import { SCENE_META, SCENE_NAMES } from '@/config/scenes'
 import { SCENE_CONFIGS } from '@/engine/sceneTiles'
 import { buildNavMesh, randomWalkableTile, findPathChunked } from '@/engine/pathfinder'
 import { createEntity, tickEntity, assignActivityPath } from '@/engine/gameEntity'
@@ -39,6 +39,8 @@ import { getChunkKeysInRadius, type WorldChunk } from '@/engine/world/chunks'
 import { EntityChunkIndex } from '@/engine/world/entityChunks'
 import CityPlanView from './CityPlanView'
 import { Button } from '@/components/ui/button'
+import { useMapDrag } from '@/hooks/useMapDrag'
+import { pickBotAtCanvasPoint } from '@/components/pixelCity3DPicking'
 
 // ── Constants ──────────────────────────────────────────────────────────
 // Approximate game-loop tile size in CSS pixels (used for entity <-> world mapping)
@@ -60,8 +62,8 @@ type NavMeshCache = { loc: string; ped: boolean[][]; boat: boolean[][] } | null
 export default function PixelCityMap3D({
   world, selectedBotId, onBotClick, onLocationClick, currentLocation,
 }: Props) {
-  const containerRef  = useRef<HTMLDivElement>(null)
   const canvasRef     = useRef<HTMLCanvasElement>(null)
+  const pointerDownRef = useRef<{ x: number; y: number } | null>(null)
 
   // Three.js handles
   const threeRef      = useRef<ThreeSceneHandle | null>(null)
@@ -76,18 +78,18 @@ export default function PixelCityMap3D({
   const chunkTargetSetRef = useRef<string>('')
   const entityChunkIndexRef = useRef(new EntityChunkIndex(DEFAULT_CHUNK_SIZE))
 
-  // Camera pan / zoom
-  const zoomRef       = useRef(1.0)
-  const panColRef     = useRef(0)
-  const panRowRef     = useRef(0)
-  const isDraggingRef = useRef(false)
-  const dragStartRef  = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
-
   const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
 
   const activeLocation = currentLocation || SCENE_NAMES[0]
   const meta           = SCENE_META[activeLocation] || SCENE_META['南山科技园']
   const sceneConfig    = SCENE_CONFIGS[activeLocation]
+
+  // Camera pan / zoom (extracted hook)
+  const {
+    containerRef, zoomRef, panColRef, panRowRef,
+    handleMouseDown, handleMouseMove, handleMouseUp, handleWheel,
+    resetCamera,
+  } = useMapDrag(sceneConfig)
 
   const upsertEntityChunk = useCallback((entity: GameEntity) => {
     entityChunkIndexRef.current.upsert(entity)
@@ -129,16 +131,16 @@ export default function PixelCityMap3D({
     void manager.setChunkTargets({ visibleChunks, warmChunks })
   }, [])
 
-  // ── Nav mesh ──────────────────────────────────────────────────────
-  if (!navMeshRef.current || navMeshRef.current.loc !== activeLocation) {
-    if (sceneConfig) {
-      navMeshRef.current = {
-        loc:  activeLocation,
-        ped:  buildNavMesh(sceneConfig.tilemap, 'pedestrian'),
-        boat: buildNavMesh(sceneConfig.tilemap, 'boat'),
-      }
+  // ── Nav mesh (recompute when location changes) ─────────────────────
+  const navMesh = useMemo(() => {
+    if (!sceneConfig) return null
+    return {
+      loc:  activeLocation,
+      ped:  buildNavMesh(sceneConfig.tilemap, 'pedestrian'),
+      boat: buildNavMesh(sceneConfig.tilemap, 'boat'),
     }
-  }
+  }, [activeLocation, sceneConfig])
+  useEffect(() => { navMeshRef.current = navMesh }, [navMesh])
 
   // ── Three.js scene init ────────────────────────────────────────────
   useEffect(() => {
@@ -160,7 +162,7 @@ export default function PixelCityMap3D({
       three.dispose()
       threeRef.current = null
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- containerRef is a stable ref object from useMapDrag
 
   // ── Rebuild chunked world renderables on location change ───────────
   useEffect(() => {
@@ -186,11 +188,7 @@ export default function PixelCityMap3D({
     preloadBuildings(keys)
 
     // Reset camera to map centre
-    const cols = sceneConfig.cols
-    const rows = sceneConfig.rows
-    panColRef.current = cols / 2
-    panRowRef.current = rows / 2
-    zoomRef.current   = 1.0
+    resetCamera(sceneConfig.cols, sceneConfig.rows)
     sceneChunksRef.current = sceneConfigToWorldChunks(sceneConfig)
     chunkTargetSetRef.current = ''
     updateVisibleChunks(panColRef.current, panRowRef.current)
@@ -295,36 +293,7 @@ export default function PixelCityMap3D({
     })
     obs.observe(container)
     return () => obs.disconnect()
-  }, [])
-
-  // ── Mouse interactions ────────────────────────────────────────────
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    isDraggingRef.current = true
-    dragStartRef.current  = {
-      x: e.clientX, y: e.clientY,
-      panX: panColRef.current, panY: panRowRef.current,
-    }
-  }, [])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDraggingRef.current) return
-    const cols = sceneConfig?.cols ?? 36
-    const rows = sceneConfig?.rows ?? 24
-    const dx = (e.clientX - dragStartRef.current.x) / (containerRef.current?.clientWidth ?? 800)
-    const dy = (e.clientY - dragStartRef.current.y) / (containerRef.current?.clientHeight ?? 600)
-    panColRef.current = dragStartRef.current.panX - dx * cols * 0.8
-    panRowRef.current = dragStartRef.current.panY - dy * rows * 0.8
-  }, [sceneConfig])
-
-  const handleMouseUp = useCallback(() => {
-    isDraggingRef.current = false
-  }, [])
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-    zoomRef.current = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomRef.current + delta))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- containerRef is a stable ref object from useMapDrag
 
   // ── Game + render loop ────────────────────────────────────────────
   useGameLoop((dt) => {
@@ -385,6 +354,38 @@ export default function PixelCityMap3D({
     three.render()
   })
 
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    pointerDownRef.current = { x: e.clientX, y: e.clientY }
+    handleMouseDown(e)
+  }, [handleMouseDown])
+
+  const handleCanvasMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const down = pointerDownRef.current
+    pointerDownRef.current = null
+    handleMouseUp()
+
+    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return
+
+    const canvas = canvasRef.current
+    const camera = threeRef.current?.camera
+    if (!canvas || !camera) return
+
+    const botId = pickBotAtCanvasPoint(
+      e.clientX,
+      e.clientY,
+      canvas,
+      camera,
+      entitiesRef.current,
+      VIRTUAL_TILE_PX,
+    )
+    if (botId) onBotClick(botId)
+  }, [handleMouseUp, onBotClick])
+
+  const handleCanvasMouseLeave = useCallback(() => {
+    pointerDownRef.current = null
+    handleMouseUp()
+  }, [handleMouseUp])
+
   return (
     <div
       ref={containerRef}
@@ -400,13 +401,13 @@ export default function PixelCityMap3D({
           data-testid="scene-3d-canvas"
           className="w-full h-full"
           style={{
-            cursor: isDraggingRef.current ? 'grabbing' : 'grab',
+            cursor: 'grab',
             display: 'block',
           }}
-          onMouseDown={handleMouseDown}
+          onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onMouseUp={handleCanvasMouseUp}
+          onMouseLeave={handleCanvasMouseLeave}
           onWheel={handleWheel}
         />
       )}

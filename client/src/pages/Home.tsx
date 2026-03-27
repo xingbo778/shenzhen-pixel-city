@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from "react";
-import { useWorldData, sendMessage, setEngineUrl, type DataSourceMode } from "@/hooks/useWorldData";
+import { useWorldData, sendMessage, setEngineUrl, normalizeEngineUrl, type DataSourceMode } from "@/hooks/useWorldData";
 import { OVERVIEW_TO_SCENE_KEY } from "@/config/scenes";
 import BotCard from "@/components/BotCard";
 import TopHeader from "@/components/TopHeader";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
+import SceneErrorBoundary from "@/components/SceneErrorBoundary";
 
 const ENGINE_URL_STORAGE_KEY = "szpc.engineUrl";
 const DATA_SOURCE_MODE_STORAGE_KEY = "szpc.dataSourceMode";
@@ -23,7 +24,7 @@ function getInitialEngineUrl() {
   if (typeof window === "undefined") return fallback;
 
   try {
-    return window.localStorage.getItem(ENGINE_URL_STORAGE_KEY) || fallback;
+    return normalizeEngineUrl(window.localStorage.getItem(ENGINE_URL_STORAGE_KEY) || "") || fallback;
   } catch {
     return fallback;
   }
@@ -89,7 +90,7 @@ export default function Home() {
   const { world, moments, isConnected, isLoading, lastUpdated, error, refresh } = useWorldData(3000, engineUrl, dataSourceMode);
 
   const handleEngineUrlChange = useCallback((url: string) => {
-    const normalizedUrl = url.trim().replace(/\/$/, "");
+    const normalizedUrl = normalizeEngineUrl(url);
     if (!normalizedUrl) {
       toast.error("请输入有效的 world_engine 地址");
       return;
@@ -101,7 +102,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    setEngineUrl(engineUrl);
+    if (!setEngineUrl(engineUrl)) return;
     try {
       window.localStorage.setItem(ENGINE_URL_STORAGE_KEY, engineUrl);
     } catch {
@@ -122,6 +123,14 @@ export default function Home() {
   const [showBotDetail, setShowBotDetail] = useState(false);
   const [mapLayer, setMapLayer] = useState<'overview' | 'scene'>('overview');
   const [zoomAnimating, setZoomAnimating] = useState(false);
+  const zoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up zoom timer on unmount
+  useEffect(() => {
+    return () => {
+      if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
+    };
+  }, []);
 
   const handleBotClick = useCallback((botId: string) => {
     setSelectedBotId(botId);
@@ -137,7 +146,9 @@ export default function Home() {
   const handleOverviewLocationSelect = useCallback((locationKey: string) => {
     const sceneName = OVERVIEW_TO_SCENE_KEY[locationKey] || '宝安城中村';
     setZoomAnimating(true);
-    setTimeout(() => {
+    if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
+    zoomTimerRef.current = setTimeout(() => {
+      zoomTimerRef.current = null;
       setCurrentMapLocation(sceneName);
       setSelectedLocation(sceneName);
       setMapLayer('scene');
@@ -300,6 +311,7 @@ export default function Home() {
 
           {/* 场景层 */}
           {mapLayer === 'scene' && (
+            <SceneErrorBoundary>
             <Suspense fallback={<PanelFallback label="加载 3D 场景..." />}>
               <div className="absolute inset-0">
                 <PixelCityMap3D
@@ -311,6 +323,7 @@ export default function Home() {
                 />
               </div>
             </Suspense>
+            </SceneErrorBoundary>
           )}
         </div>
 

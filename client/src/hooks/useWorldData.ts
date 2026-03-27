@@ -6,8 +6,27 @@ import { parseMomentsPayload, parseWorldPayload } from "@/lib/worldValidation";
 // 全局 engineUrl，支持运行时动态修改
 let _engineUrl = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
 
+export function normalizeEngineUrl(url: string): string | null {
+  try {
+    const normalized = url.trim().replace(/\/$/, "");
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
 export function setEngineUrl(url: string) {
-  _engineUrl = url.replace(/\/$/, ""); // 去掉末尾斜杠
+  const normalized = normalizeEngineUrl(url);
+  if (!normalized) {
+    console.warn("[setEngineUrl] rejected invalid URL:", url);
+    return false;
+  }
+  _engineUrl = normalized;
+  return true;
 }
 
 export function getEngineUrl() {
@@ -36,9 +55,9 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: Data
   });
 
   // 用 ref 追踪最新的 engineUrl，避免 stale closure
-  const engineUrlRef = useRef(engineUrl || _engineUrl);
+  const engineUrlRef = useRef(normalizeEngineUrl(engineUrl || "") || _engineUrl);
   useEffect(() => {
-    engineUrlRef.current = engineUrl || _engineUrl;
+    engineUrlRef.current = normalizeEngineUrl(engineUrl || "") || _engineUrl;
   }, [engineUrl]);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,6 +65,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: Data
   const hasConnectedRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const consecutiveFailsRef = useRef(0);
 
   const fetchWorld = useCallback(async () => {
     if (mode === "mock") {
@@ -80,6 +100,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: Data
       if (!isMountedRef.current || requestId !== requestIdRef.current) return;
 
       hasConnectedRef.current = true;
+      consecutiveFailsRef.current = 0;
       setState(prev => ({
         ...prev,
         world: worldData,
@@ -92,6 +113,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: Data
     } catch (err) {
       if (!isMountedRef.current || requestId !== requestIdRef.current) return;
       if (err instanceof DOMException && err.name === "AbortError") return;
+      consecutiveFailsRef.current++;
       setState(prev => {
         // After first successful connection, keep last real data on disconnect
         // Only use mock data in auto mode when we've NEVER connected successfully
@@ -111,7 +133,7 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: Data
   // 当 engineUrl 变化时立即重新拉取
   useEffect(() => {
     if (engineUrl || mode === "mock") {
-      engineUrlRef.current = engineUrl || _engineUrl;
+      engineUrlRef.current = normalizeEngineUrl(engineUrl || "") || _engineUrl;
       hasConnectedRef.current = false;
       setState(prev => ({
         ...prev,
@@ -128,11 +150,14 @@ export function useWorldData(pollInterval = 3000, engineUrl?: string, mode: Data
     fetchWorld();
 
     const schedule = () => {
+      // Exponential backoff with jitter on consecutive failures (cap at 30s)
+      const backoff = Math.min(pollInterval * Math.pow(1.5, consecutiveFailsRef.current), 30000);
+      const jitter = backoff * (0.8 + Math.random() * 0.4); // +/- 20%
       timerRef.current = setTimeout(() => {
         fetchWorld().then(() => {
           if (isMountedRef.current) schedule();
         });
-      }, pollInterval);
+      }, jitter);
     };
     schedule();
 
@@ -157,7 +182,8 @@ export async function sendMessage(targetId: string, message: string, senderAlias
       signal: AbortSignal.timeout(5000),
     });
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.warn("[sendMessage] failed:", err);
     return false;
   }
 }
@@ -171,7 +197,8 @@ export async function fetchBotDetail(botId: string) {
     });
     if (!res.ok) return null;
     return res.json();
-  } catch {
+  } catch (err) {
+    console.warn("[fetchBotDetail] failed:", err);
     return null;
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,13 +26,9 @@ export function ManusDialog({
   onOpenChange,
   onClose,
 }: ManusDialogProps) {
-  const [internalOpen, setInternalOpen] = useState(open);
+  const [internalOpen, setInternalOpen] = useState(false);
 
-  useEffect(() => {
-    if (!onOpenChange) {
-      setInternalOpen(open);
-    }
-  }, [open, onOpenChange]);
+  const isOpen = onOpenChange ? open : (open || internalOpen);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (onOpenChange) {
@@ -48,7 +44,7 @@ export function ManusDialog({
 
   return (
     <Dialog
-      open={onOpenChange ? open : internalOpen}
+      open={isOpen}
       onOpenChange={handleOpenChange}
     >
       <DialogContent className="py-5 bg-[#f8f8f7] rounded-[20px] w-[400px] shadow-[0px_4px_11px_0px_rgba(0,0,0,0.08)] border border-[rgba(0,0,0,0.08)] backdrop-blur-2xl p-0 gap-0 text-center">
@@ -60,11 +56,9 @@ export function ManusDialog({
           ) : null}
 
           {/* Title and subtitle */}
-          {title ? (
-            <DialogTitle className="text-xl font-semibold text-[#34322d] leading-[26px] tracking-[-0.44px]">
-              {title}
-            </DialogTitle>
-          ) : null}
+          <DialogTitle className={title ? "text-xl font-semibold text-[#34322d] leading-[26px] tracking-[-0.44px]" : "sr-only"}>
+            {title || "Manus login"}
+          </DialogTitle>
           <DialogDescription className="text-sm text-[#858481] leading-5 tracking-[-0.154px]">
             Please login with Manus to continue
           </DialogDescription>
