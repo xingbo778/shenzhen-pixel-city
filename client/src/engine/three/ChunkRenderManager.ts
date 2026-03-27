@@ -21,6 +21,11 @@ interface PendingChunkBuild {
   cancelled: boolean
 }
 
+interface ChunkTargetState {
+  visibleChunks: WorldChunk[]
+  warmChunks?: WorldChunk[]
+}
+
 export class ChunkRenderManager {
   private readonly scene: THREE.Scene
   private readonly chunkSize: number
@@ -40,8 +45,12 @@ export class ChunkRenderManager {
     return this.handles.get(chunkKey)
   }
 
-  async setVisibleChunks(chunks: WorldChunk[]): Promise<void> {
-    const targetKeys = new Set(chunks.map(chunk => chunk.key))
+  async setChunkTargets({ visibleChunks, warmChunks = visibleChunks }: ChunkTargetState): Promise<void> {
+    const visibleKeys = new Set(visibleChunks.map(chunk => chunk.key))
+    const retainedChunks = new Map<string, WorldChunk>()
+    for (const chunk of warmChunks) retainedChunks.set(chunk.key, chunk)
+    for (const chunk of visibleChunks) retainedChunks.set(chunk.key, chunk)
+    const targetKeys = new Set(retainedChunks.keys())
 
     for (const [key, pending] of Array.from(this.pending.entries())) {
       if (!targetKeys.has(key)) {
@@ -55,11 +64,13 @@ export class ChunkRenderManager {
         this.scene.remove(handle.group)
         handle.dispose()
         this.handles.delete(key)
+        continue
       }
+      handle.group.visible = visibleKeys.has(key)
     }
 
     await Promise.all(
-      chunks.map(async chunk => {
+      Array.from(retainedChunks.values()).map(async chunk => {
         if (this.handles.has(chunk.key) || this.pending.has(chunk.key)) return
 
         const pending: PendingChunkBuild = { cancelled: false }
@@ -70,6 +81,7 @@ export class ChunkRenderManager {
             handle.dispose()
             return
           }
+          handle.group.visible = visibleKeys.has(chunk.key)
           this.scene.add(handle.group)
           this.handles.set(chunk.key, handle)
         } finally {
@@ -81,6 +93,7 @@ export class ChunkRenderManager {
 
   updateLOD(camera: THREE.Camera): void {
     for (const handle of Array.from(this.handles.values())) {
+      if (!handle.group.visible) continue
       handle.updateLOD(camera)
     }
   }

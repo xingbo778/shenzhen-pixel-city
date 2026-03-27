@@ -48,6 +48,7 @@ import { Button } from '@/components/ui/button'
 // Approximate game-loop tile size in CSS pixels (used for entity <-> world mapping)
 const VIRTUAL_TILE_PX = 32
 const CHUNK_RENDER_RADIUS = 1
+const CHUNK_PRELOAD_RADIUS = 2
 
 interface Props {
   world: WorldState | null
@@ -78,7 +79,7 @@ export default function PixelCityMap3D({
   const navMeshRef    = useRef<NavMeshCache>(null)
   const sceneBuildTokenRef = useRef(0)
   const sceneChunksRef = useRef<Map<string, WorldChunk>>(new Map())
-  const visibleChunkSetRef = useRef<string>('')
+  const chunkTargetSetRef = useRef<string>('')
 
   // Camera pan / zoom
   const zoomRef       = useRef(1.0)
@@ -101,13 +102,19 @@ export default function PixelCityMap3D({
     const visibleKeys = getChunkKeysInRadius(centerChunk, CHUNK_RENDER_RADIUS)
       .filter(key => sceneChunksRef.current.has(key))
       .sort()
-    const nextKey = visibleKeys.join('|')
-    if (nextKey === visibleChunkSetRef.current) return
-    visibleChunkSetRef.current = nextKey
+    const warmKeys = getChunkKeysInRadius(centerChunk, CHUNK_PRELOAD_RADIUS)
+      .filter(key => sceneChunksRef.current.has(key))
+      .sort()
+    const nextKey = `${visibleKeys.join('|')}::${warmKeys.join('|')}`
+    if (nextKey === chunkTargetSetRef.current) return
+    chunkTargetSetRef.current = nextKey
     const visibleChunks = visibleKeys
       .map(key => sceneChunksRef.current.get(key))
       .filter((chunk): chunk is WorldChunk => !!chunk)
-    void manager.setVisibleChunks(visibleChunks)
+    const warmChunks = warmKeys
+      .map(key => sceneChunksRef.current.get(key))
+      .filter((chunk): chunk is WorldChunk => !!chunk)
+    void manager.setChunkTargets({ visibleChunks, warmChunks })
   }, [])
 
   // ── Nav mesh ──────────────────────────────────────────────────────
@@ -194,7 +201,7 @@ export default function PixelCityMap3D({
     panRowRef.current = rows / 2
     zoomRef.current   = 1.0
     sceneChunksRef.current = sceneConfigToWorldChunks(sceneConfig)
-    visibleChunkSetRef.current = ''
+    chunkTargetSetRef.current = ''
     updateVisibleChunks(panColRef.current, panRowRef.current)
 
     // Reset entities for new location
@@ -210,7 +217,7 @@ export default function PixelCityMap3D({
     return () => {
       disposed = true
       sceneChunksRef.current = new Map()
-      visibleChunkSetRef.current = ''
+      chunkTargetSetRef.current = ''
       if (chunkRenderManagerRef.current === manager) {
         chunkRenderManagerRef.current.dispose()
         chunkRenderManagerRef.current = null
