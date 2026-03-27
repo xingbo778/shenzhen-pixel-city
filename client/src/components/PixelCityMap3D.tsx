@@ -41,6 +41,7 @@ import { ChunkRenderManager } from '@/engine/three/ChunkRenderManager'
 import { sceneConfigToWorldChunks } from '@/engine/world/sceneChunks'
 import { DEFAULT_CHUNK_SIZE, worldToChunk } from '@/engine/world/coords'
 import { getChunkKeysInRadius, type WorldChunk } from '@/engine/world/chunks'
+import { EntityChunkIndex } from '@/engine/world/entityChunks'
 import CityPlanView from './CityPlanView'
 import { Button } from '@/components/ui/button'
 
@@ -49,6 +50,7 @@ import { Button } from '@/components/ui/button'
 const VIRTUAL_TILE_PX = 32
 const CHUNK_RENDER_RADIUS = 1
 const CHUNK_PRELOAD_RADIUS = 2
+const ENTITY_SIMULATION_RADIUS = 1
 
 interface Props {
   world: WorldState | null
@@ -80,6 +82,7 @@ export default function PixelCityMap3D({
   const sceneBuildTokenRef = useRef(0)
   const sceneChunksRef = useRef<Map<string, WorldChunk>>(new Map())
   const chunkTargetSetRef = useRef<string>('')
+  const entityChunkIndexRef = useRef(new EntityChunkIndex(DEFAULT_CHUNK_SIZE))
 
   // Camera pan / zoom
   const zoomRef       = useRef(1.0)
@@ -93,6 +96,23 @@ export default function PixelCityMap3D({
   const activeLocation = currentLocation || SCENE_NAMES[0]
   const meta           = SCENE_META[activeLocation] || SCENE_META['南山科技园']
   const sceneConfig    = SCENE_CONFIGS[activeLocation]
+
+  const upsertEntityChunk = useCallback((entity: GameEntity) => {
+    entityChunkIndexRef.current.upsert(entity)
+  }, [])
+
+  const removeEntityChunk = useCallback((entityId: string) => {
+    entityChunkIndexRef.current.remove(entityId)
+  }, [])
+
+  const getActiveEntityIds = useCallback((col: number, row: number) => {
+    const centerChunk = worldToChunk(Math.floor(col), Math.floor(row), DEFAULT_CHUNK_SIZE)
+    return new Set(entityChunkIndexRef.current.getIdsInRadius(
+      centerChunk.cx,
+      centerChunk.cy,
+      ENTITY_SIMULATION_RADIUS,
+    ))
+  }, [])
 
   const updateVisibleChunks = useCallback((col: number, row: number) => {
     const manager = chunkRenderManagerRef.current
@@ -206,6 +226,7 @@ export default function PixelCityMap3D({
 
     // Reset entities for new location
     entitiesRef.current = {}
+    entityChunkIndexRef.current.clear()
     demoSpawnedRef.current = false
 
     // Vehicles
@@ -247,6 +268,7 @@ export default function PixelCityMap3D({
           const entity = createEntity(botId, spawn[0], spawn[1], VIRTUAL_TILE_PX)
           assignActivityPath(entity, bot.current_activity || bot.occupation || '', tilemap, navMesh)
           entitiesRef.current[botId] = entity
+          upsertEntityChunk(entity)
         } else {
           const entity   = entitiesRef.current[botId]
           const activity = bot.current_activity || bot.occupation || ''
@@ -267,7 +289,10 @@ export default function PixelCityMap3D({
       })
 
       Object.keys(entitiesRef.current).forEach(id => {
-        if (!aliveBotIds.includes(id)) delete entitiesRef.current[id]
+        if (!aliveBotIds.includes(id)) {
+          delete entitiesRef.current[id]
+          removeEntityChunk(id)
+        }
       })
     }
 
@@ -291,9 +316,10 @@ export default function PixelCityMap3D({
           entity.pathIdx = 1
         }
         entitiesRef.current[demoId] = entity
+        upsertEntityChunk(entity)
       }
     }
-  }, [world, activeLocation, sceneConfig])
+  }, [world, activeLocation, sceneConfig, removeEntityChunk, upsertEntityChunk])
 
   // ── Resize handler ────────────────────────────────────────────────
   useEffect(() => {
@@ -342,11 +368,18 @@ export default function PixelCityMap3D({
     const sc         = sceneConfig
     const navMesh    = navMeshRef.current?.ped
     if (!three || !sc) return
+    const col  = Math.max(0, Math.min(sc.cols - 1, panColRef.current))
+    const row  = Math.max(0, Math.min(sc.rows - 1, panRowRef.current))
+    const activeEntityIds = getActiveEntityIds(col, row)
+    const activeEntities: Record<string, GameEntity> = {}
 
     // Tick entities — throttle A* to max 2 per frame to avoid hitching
     let pathsThisFrame = 0
     Object.entries(entitiesRef.current).forEach(([botId, entity]) => {
+      if (!activeEntityIds.has(botId)) return
+      activeEntities[botId] = entity
       tickEntity(entity, dt, VIRTUAL_TILE_PX)
+      upsertEntityChunk(entity)
 
       if (entity.pathIdx >= entity.path.length && navMesh && pathsThisFrame < 2) {
         pathsThisFrame++
@@ -372,20 +405,16 @@ export default function PixelCityMap3D({
     // Bubble labels
     bubblesRef.current = tickBubbleLabels(
       bubblesRef.current,
-      entitiesRef.current,
+      activeEntities,
       VIRTUAL_TILE_PX,
       dt,
       three.scene,
     )
 
     // Sync character sprites
-    charRef.current?.sync(entitiesRef.current, world, VIRTUAL_TILE_PX, selectedBotId, three.camera)
+    charRef.current?.sync(activeEntities, world, VIRTUAL_TILE_PX, selectedBotId, three.camera)
 
     // Update camera
-    const cols = sc.cols
-    const rows = sc.rows
-    const col  = Math.max(0, Math.min(cols - 1, panColRef.current))
-    const row  = Math.max(0, Math.min(rows - 1, panRowRef.current))
     updateVisibleChunks(col, row)
     setCameraTarget(three.camera, col, row, zoomRef.current)
 
