@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { sceneConfigToWorldChunks } from "@/engine/world/sceneChunks";
+import { getChunksIntersectingWorldBounds, sceneConfigToWorldChunks } from "@/engine/world/sceneChunks";
 import type { SceneConfig } from "@/engine/sceneTiles";
 
 describe("sceneConfigToWorldChunks", () => {
@@ -36,5 +36,35 @@ describe("sceneConfigToWorldChunks", () => {
       pngKey: "office_tower",
     });
     expect(chunks.get("32,31")?.revision).toBe(4);
+  });
+
+  test("selects only chunks intersecting a world tile viewport", () => {
+    const sceneConfig: SceneConfig = {
+      name: "test-scene",
+      cols: 6,
+      rows: 4,
+      tilemap: [
+        ["grass", "grass", "grass", "grass", "grass", "grass"],
+        ["grass", "grass", "grass", "grass", "grass", "grass"],
+        ["grass", "grass", "grass", "grass", "grass", "grass"],
+        ["grass", "grass", "grass", "grass", "grass", "grass"],
+      ],
+      objects: [],
+      ambientColor: "#000000",
+      lightColor: "#ffffff",
+      walkableRowStart: 0,
+    };
+
+    const chunks = sceneConfigToWorldChunks(sceneConfig, { chunkSize: 2 });
+    const visible = getChunksIntersectingWorldBounds(chunks, {
+      minCol: 1,
+      maxCol: 4,
+      minRow: 0,
+      maxRow: 2,
+    }, 2);
+
+    expect(visible.map(chunk => chunk.key).sort()).toEqual([
+      "0,0", "0,1", "1,0", "1,1", "2,0", "2,1",
+    ]);
   });
 });

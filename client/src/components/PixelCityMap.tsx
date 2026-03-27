@@ -34,6 +34,9 @@ import { preloadImage, getImage } from '@/engine/imageCache'
 import { useGameLoop } from '@/hooks/useGameLoop'
 import { useCanvasResize } from '@/hooks/useCanvasResize'
 import type { ZDrawable } from '@/engine/types'
+import { DEFAULT_CHUNK_SIZE } from '@/engine/world/coords'
+import { getChunksIntersectingWorldBounds, sceneConfigToWorldChunks } from '@/engine/world/sceneChunks'
+import type { WorldChunk } from '@/engine/world/chunks'
 
 const OBJECTS_SHEET_URL    = '/sprites/objects/objects_sheet.png'
 const OBJECTS_MANIFEST_URL = '/sprites/objects/objects_manifest.json'
@@ -59,6 +62,7 @@ export default function PixelCityMap({
   const bubblesRef      = useRef<EmotionBubble[]>([])
   const navMeshRef      = useRef<NavMeshCache>(null)
   const objManifestRef  = useRef<ObjectManifest | null>(null)
+  const sceneChunksRef  = useRef<Map<string, WorldChunk>>(new Map())
 
   // Zoom & pan
   const zoomRef       = useRef(1.0)
@@ -106,6 +110,7 @@ export default function PixelCityMap({
       ? Object.keys(world.bots).filter(id => world.bots[id].status === 'alive').length
       : 10
     vehiclesRef.current    = initVehicles(activeLocation, botCount, sceneConfig.tilemap)
+    sceneChunksRef.current = sceneConfigToWorldChunks(sceneConfig)
     panOffsetRef.current   = { x: 0, y: 0 }
   }, [activeLocation])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -312,15 +317,31 @@ export default function PixelCityMap({
 
     const worldX = (cssW - worldW) / 2 + panX
     const worldY = (cssH - worldH) / 2 + panY
+    const visibleTileBounds = {
+      minCol: Math.max(0, Math.floor((-worldX) / tileSize) - 1),
+      maxCol: Math.min(mapCols - 1, Math.ceil((cssW - worldX) / tileSize)),
+      minRow: Math.max(0, Math.floor((-worldY) / tileSize) - 1),
+      maxRow: Math.min(mapRows - 1, Math.ceil((cssH - worldY) / tileSize)),
+    }
+    const visibleChunks = getChunksIntersectingWorldBounds(
+      sceneChunksRef.current,
+      visibleTileBounds,
+      DEFAULT_CHUNK_SIZE,
+    )
 
     // Layer 1 + 2: tiles and scene objects
     const tileSheet = getImage(TILE_SHEET_URL)
     const objSheet  = getImage(OBJECTS_SHEET_URL)
-    ctx.save()
-    ctx.translate(worldX, worldY)
-    renderTileMap(ctx, tilemap, tileSize, tick, tileSheet)
-    renderSceneObjects(ctx, sceneConfig.objects, tileSize, objSheet, objManifestRef.current)
-    ctx.restore()
+    visibleChunks.forEach((chunk) => {
+      ctx.save()
+      ctx.translate(
+        worldX + chunk.cx * DEFAULT_CHUNK_SIZE * tileSize,
+        worldY + chunk.cy * DEFAULT_CHUNK_SIZE * tileSize,
+      )
+      renderTileMap(ctx, chunk.tiles, tileSize, tick, tileSheet)
+      renderSceneObjects(ctx, chunk.objects, tileSize, objSheet, objManifestRef.current)
+      ctx.restore()
+    })
 
     const drawables: ZDrawable[] = []
 
