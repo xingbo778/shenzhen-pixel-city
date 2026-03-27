@@ -27,7 +27,7 @@ import {
 import type { EmotionBubble } from '@/engine/charSprites'
 import {
   preloadVehicleSheets, initVehicles,
-  tickAndCollectVehicleDrawables, getVehiclePositions,
+  tickAndCollectVehicleDrawables, getVehiclePositions, getVisibleVehicleIds, tickVehicles,
 } from '@/engine/vehicleSystem'
 import type { VehicleState } from '@/engine/vehicleSystem'
 import { preloadImage, getImage } from '@/engine/imageCache'
@@ -325,10 +325,19 @@ export default function PixelCityMap({
     const drawables: ZDrawable[] = []
 
     // Layer 3: vehicles
-    tickAndCollectVehicleDrawables(vehiclesRef.current, dt, worldX, worldY, worldW, worldH, cssW, cssH, drawables)
+    const vehicleViewport = {
+      xMin: (-worldX) / worldW,
+      xMax: (cssW - worldX) / worldW,
+      yMin: (-worldY) / worldH,
+      yMax: (cssH - worldY) / worldH,
+    }
+    const activeVehicleIds = getVisibleVehicleIds(vehiclesRef.current, vehicleViewport)
+    tickVehicles(vehiclesRef.current, dt, activeVehicleIds)
+    const activeVehicles = vehiclesRef.current.filter(vehicle => activeVehicleIds.has(vehicle.id))
+    tickAndCollectVehicleDrawables(activeVehicles, 0, worldX, worldY, worldW, worldH, cssW, cssH, drawables)
 
     // Layer 4: bot characters
-    const vehiclePositions = getVehiclePositions(vehiclesRef.current, worldW, worldH)
+    const vehiclePositions = getVehiclePositions(activeVehicles, worldW, worldH)
     const navMesh          = navMeshRef.current?.ped
 
     Object.entries(entitiesRef.current).forEach(([botId, entity], i) => {

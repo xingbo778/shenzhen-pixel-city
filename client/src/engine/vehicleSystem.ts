@@ -58,6 +58,13 @@ export interface VehicleState {
   frameTimer: number
 }
 
+export interface VehicleViewport {
+  xMin: number
+  xMax: number
+  yMin: number
+  yMax: number
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────
 
 export function preloadVehicleSheets(): void {
@@ -204,14 +211,7 @@ export function tickAndCollectVehicleDrawables(
 ): void {
   vehicles.forEach(v => {
     const config = VEHICLE_CONFIGS[v.type]
-    v.frameTimer += dt
-    if (v.frameTimer >= 1 / config.frameRate) {
-      v.frameTimer -= 1 / config.frameRate
-      v.frame = (v.frame + 1) % config.frames
-    }
-    v.x += v.dir * config.speed * dt
-    if (v.dir === 1  && v.x > v.lane.xMax + 0.05) v.x = v.lane.xMin - 0.05
-    if (v.dir === -1 && v.x < v.lane.xMin - 0.05) v.x = v.lane.xMax + 0.05
+    advanceVehicle(v, dt, true)
 
     const vCx = worldX + v.x * worldW
     const vCy = worldY + v.y * worldH
@@ -240,6 +240,35 @@ export function tickAndCollectVehicleDrawables(
   })
 }
 
+export function tickVehicles(
+  vehicles: VehicleState[],
+  dt: number,
+  activeIds?: Set<string>,
+): void {
+  vehicles.forEach((vehicle) => {
+    advanceVehicle(vehicle, dt, activeIds?.has(vehicle.id) ?? false)
+  })
+}
+
+export function getVisibleVehicleIds(
+  vehicles: VehicleState[],
+  viewport: VehicleViewport,
+  margin = 0.08,
+): Set<string> {
+  const activeIds = new Set<string>()
+  vehicles.forEach((vehicle) => {
+    if (
+      vehicle.x >= viewport.xMin - margin &&
+      vehicle.x <= viewport.xMax + margin &&
+      vehicle.y >= viewport.yMin - margin &&
+      vehicle.y <= viewport.yMax + margin
+    ) {
+      activeIds.add(vehicle.id)
+    }
+  })
+  return activeIds
+}
+
 /** Returns world-local positions and radii for collision avoidance. */
 export function getVehiclePositions(
   vehicles: VehicleState[],
@@ -251,4 +280,19 @@ export function getVehiclePositions(
     y: v.y * worldH,
     radius: 20 * VEHICLE_CONFIGS[v.type].scale * (VEHICLE_CONFIGS[v.type].isBoat ? 0 : 1),
   }))
+}
+
+function advanceVehicle(v: VehicleState, dt: number, animate: boolean): void {
+  const config = VEHICLE_CONFIGS[v.type]
+  if (animate) {
+    v.frameTimer += dt
+    if (v.frameTimer >= 1 / config.frameRate) {
+      v.frameTimer -= 1 / config.frameRate
+      v.frame = (v.frame + 1) % config.frames
+    }
+  }
+
+  v.x += v.dir * config.speed * dt
+  if (v.dir === 1 && v.x > v.lane.xMax + 0.05) v.x = v.lane.xMin - 0.05
+  if (v.dir === -1 && v.x < v.lane.xMin - 0.05) v.x = v.lane.xMax + 0.05
 }
