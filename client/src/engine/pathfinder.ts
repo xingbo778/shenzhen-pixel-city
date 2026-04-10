@@ -10,7 +10,12 @@
  */
 
 import type { TileType } from './sceneTiles'
-import { DEFAULT_CHUNK_SIZE, chunkKey, parseChunkKey, worldToChunk } from './world/coords'
+import {
+  DEFAULT_CHUNK_SIZE,
+  chunkKey,
+  parseChunkKey,
+  worldToChunk,
+} from './world/coords'
 
 export type NavMode = 'pedestrian' | 'vehicle' | 'boat'
 
@@ -46,34 +51,52 @@ interface ChunkPortalGraph {
 }
 
 const PEDESTRIAN_WALKABLE = new Set<TileType>([
-  'road_h', 'road_v', 'road_cross',
-  'road_cross_zebra_n', 'road_cross_zebra_s', 'road_cross_zebra_w', 'road_cross_zebra_e',
-  'road_stop_h', 'road_stop_v',
-  'sidewalk', 'sidewalk_edge',
+  'road_h',
+  'road_v',
+  'road_cross',
+  'road_cross_zebra_n',
+  'road_cross_zebra_s',
+  'road_cross_zebra_w',
+  'road_cross_zebra_e',
+  'road_stop_h',
+  'road_stop_v',
+  'sidewalk',
+  'sidewalk_edge',
   'alley',
-  'grass', 'grass_lush',
-  'concrete', 'tile_plaza',
+  'grass',
+  'grass_lush',
+  'concrete',
+  'tile_plaza',
   'park_path',
 ])
 
 const VEHICLE_DRIVABLE = new Set<TileType>([
-  'road_h', 'road_v', 'road_cross',
-  'road_cross_zebra_n', 'road_cross_zebra_s', 'road_cross_zebra_w', 'road_cross_zebra_e',
-  'road_stop_h', 'road_stop_v',
+  'road_h',
+  'road_v',
+  'road_cross',
+  'road_cross_zebra_n',
+  'road_cross_zebra_s',
+  'road_cross_zebra_w',
+  'road_cross_zebra_e',
+  'road_stop_h',
+  'road_stop_v',
 ])
 
-const BOAT_NAVIGABLE = new Set<TileType>([
-  'water', 'water_edge',
-])
+const BOAT_NAVIGABLE = new Set<TileType>(['water', 'water_edge'])
 
 /**
  * Build a boolean passability grid from the tile map.
  */
-export function buildNavMesh(tilemap: TileType[][], mode: NavMode): boolean[][] {
+export function buildNavMesh(
+  tilemap: TileType[][],
+  mode: NavMode
+): boolean[][] {
   const passable =
-    mode === 'pedestrian' ? PEDESTRIAN_WALKABLE :
-    mode === 'vehicle' ? VEHICLE_DRIVABLE :
-    BOAT_NAVIGABLE
+    mode === 'pedestrian'
+      ? PEDESTRIAN_WALKABLE
+      : mode === 'vehicle'
+        ? VEHICLE_DRIVABLE
+        : BOAT_NAVIGABLE
 
   return tilemap.map(row => row.map(tile => passable.has(tile)))
 }
@@ -92,7 +115,9 @@ interface Node {
 class MinHeap {
   private data: Node[] = []
 
-  get length() { return this.data.length }
+  get length() {
+    return this.data.length
+  }
 
   push(node: Node) {
     this.data.push(node)
@@ -113,7 +138,7 @@ class MinHeap {
     const d = this.data
     while (i > 0) {
       const p = (i - 1) >> 1
-      if (d[p].f <= d[i].f) break
+      if (compareNodes(d[p], d[i]) <= 0) break
       ;[d[p], d[i]] = [d[i], d[p]]
       i = p
     }
@@ -126,13 +151,18 @@ class MinHeap {
       let smallest = i
       const l = 2 * i + 1
       const r = 2 * i + 2
-      if (l < n && d[l].f < d[smallest].f) smallest = l
-      if (r < n && d[r].f < d[smallest].f) smallest = r
+      if (l < n && compareNodes(d[l], d[smallest]) < 0) smallest = l
+      if (r < n && compareNodes(d[r], d[smallest]) < 0) smallest = r
       if (smallest === i) break
       ;[d[smallest], d[i]] = [d[i], d[smallest]]
       i = smallest
     }
   }
+}
+
+function compareNodes(a: Node, b: Node): number {
+  if (a.f !== b.f) return a.f - b.f
+  return b.g - a.g
 }
 
 // ── Path cache ───────────────────────────────────────────────────
@@ -143,8 +173,9 @@ interface CachedPath {
 }
 
 const PATH_CACHE = new Map<string, CachedPath>()
-const CACHE_TTL = 5000  // 5 seconds
+const CACHE_TTL = 5000 // 5 seconds
 const MAX_CACHE_SIZE = 200
+const MIN_ITERATION_BUDGET = 50_000
 
 function prunePathCache() {
   if (PATH_CACHE.size <= MAX_CACHE_SIZE) return
@@ -162,7 +193,10 @@ function prunePathCache() {
 
 // ── Chunk graph cache ────────────────────────────────────────────
 
-const CHUNK_GRAPH_CACHE = new WeakMap<boolean[][], Map<number, ChunkPortalGraph>>()
+const CHUNK_GRAPH_CACHE = new WeakMap<
+  boolean[][],
+  Map<number, ChunkPortalGraph>
+>()
 
 function getChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph {
   let perMesh = CHUNK_GRAPH_CACHE.get(mesh)
@@ -179,7 +213,10 @@ function getChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph {
   return graph
 }
 
-function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph {
+function buildChunkGraph(
+  mesh: boolean[][],
+  chunkSize: number
+): ChunkPortalGraph {
   const rows = mesh.length
   const cols = mesh[0]?.length ?? 0
   const nodes = new Map<string, PortalNode>()
@@ -217,7 +254,7 @@ function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph
     aRow: number,
     bChunk: string,
     bCol: number,
-    bRow: number,
+    bRow: number
   ) => {
     const aId = addNode(aChunk, aCol, aRow)
     const bId = addNode(bChunk, bCol, bRow)
@@ -261,7 +298,14 @@ function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph
 
       const endRow = row - 1
       const midRow = startRow + Math.floor((endRow - startRow) / 2)
-      addPortalPair(leftChunk, boundaryCol, midRow, rightChunk, boundaryCol + 1, midRow)
+      addPortalPair(
+        leftChunk,
+        boundaryCol,
+        midRow,
+        rightChunk,
+        boundaryCol + 1,
+        midRow
+      )
     }
   }
 
@@ -302,18 +346,30 @@ function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph
 
       const endCol = col - 1
       const midCol = startCol + Math.floor((endCol - startCol) / 2)
-      addPortalPair(topChunk, midCol, boundaryRow, bottomChunk, midCol, boundaryRow + 1)
+      addPortalPair(
+        topChunk,
+        midCol,
+        boundaryRow,
+        bottomChunk,
+        midCol,
+        boundaryRow + 1
+      )
     }
   }
 
-  chunkNodes.forEach((portalIds) => {
+  chunkNodes.forEach(portalIds => {
     for (let i = 0; i < portalIds.length; i++) {
       const fromNode = nodes.get(portalIds[i])
       if (!fromNode) continue
       for (let j = i + 1; j < portalIds.length; j++) {
         const toNode = nodes.get(portalIds[j])
         if (!toNode) continue
-        const cost = heuristic(fromNode.col, fromNode.row, toNode.col, toNode.row)
+        const cost = heuristic(
+          fromNode.col,
+          fromNode.row,
+          toNode.col,
+          toNode.row
+        )
         connect(fromNode.id, toNode.id, cost)
       }
     }
@@ -329,13 +385,21 @@ function buildChunkGraph(mesh: boolean[][], chunkSize: number): ChunkPortalGraph
 
 // ── A* pathfinding ──────────────────────────────────────────────
 
-const DIRS: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+const DIRS: [number, number][] = [
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+]
 
 function heuristic(ac: number, ar: number, bc: number, br: number): number {
   return Math.abs(ac - bc) + Math.abs(ar - br)
 }
 
-function normalizeBounds(mesh: boolean[][], bounds?: SearchBounds): SearchBounds {
+function normalizeBounds(
+  mesh: boolean[][],
+  bounds?: SearchBounds
+): SearchBounds {
   const rows = mesh.length
   const cols = mesh[0]?.length ?? 0
   const fallback = {
@@ -358,11 +422,17 @@ function normalizeBounds(mesh: boolean[][], bounds?: SearchBounds): SearchBounds
 function cacheKeyForPath(
   from: [number, number],
   to: [number, number],
-  bounds: SearchBounds,
+  bounds: SearchBounds
 ): string {
   return [
-    from[0], from[1], to[0], to[1],
-    bounds.minCol, bounds.maxCol, bounds.minRow, bounds.maxRow,
+    from[0],
+    from[1],
+    to[0],
+    to[1],
+    bounds.minCol,
+    bounds.maxCol,
+    bounds.minRow,
+    bounds.maxRow,
   ].join(',')
 }
 
@@ -370,7 +440,7 @@ function findPathInternal(
   mesh: boolean[][],
   from: [number, number],
   to: [number, number],
-  bounds?: SearchBounds,
+  bounds?: SearchBounds
 ): [number, number][] {
   const rows = mesh.length
   const cols = mesh[0]?.length ?? 0
@@ -384,11 +454,19 @@ function findPathInternal(
   if (!mesh[tr][tc]) return []
 
   const normalizedBounds = normalizeBounds(mesh, bounds)
+  const searchArea =
+    (normalizedBounds.maxCol - normalizedBounds.minCol + 1) *
+    (normalizedBounds.maxRow - normalizedBounds.minRow + 1)
+  const maxIterations = Math.max(MIN_ITERATION_BUDGET, searchArea * 2)
   if (
-    fc < normalizedBounds.minCol || fc > normalizedBounds.maxCol ||
-    fr < normalizedBounds.minRow || fr > normalizedBounds.maxRow ||
-    tc < normalizedBounds.minCol || tc > normalizedBounds.maxCol ||
-    tr < normalizedBounds.minRow || tr > normalizedBounds.maxRow
+    fc < normalizedBounds.minCol ||
+    fc > normalizedBounds.maxCol ||
+    fr < normalizedBounds.minRow ||
+    fr > normalizedBounds.maxRow ||
+    tc < normalizedBounds.minCol ||
+    tc > normalizedBounds.maxCol ||
+    tr < normalizedBounds.minRow ||
+    tr > normalizedBounds.maxRow
   ) {
     return []
   }
@@ -400,7 +478,13 @@ function findPathInternal(
   }
 
   const open = new MinHeap()
-  open.push({ col: fc, row: fr, g: 0, f: heuristic(fc, fr, tc, tr), parent: null })
+  open.push({
+    col: fc,
+    row: fr,
+    g: 0,
+    f: heuristic(fc, fr, tc, tr),
+    parent: null,
+  })
 
   const closed = new Set<number>()
   const key = (col: number, row: number) => row * cols + col
@@ -408,7 +492,9 @@ function findPathInternal(
   const gMap = new Map<number, number>()
   gMap.set(key(fc, fr), 0)
 
+  let iterations = 0
   while (open.length > 0) {
+    if (++iterations > maxIterations) break
     const current = open.pop()!
 
     if (current.col === tc && current.row === tr) {
@@ -432,8 +518,10 @@ function findPathInternal(
       const nextCol = current.col + dc
       const nextRow = current.row + dr
       if (
-        nextRow < normalizedBounds.minRow || nextRow > normalizedBounds.maxRow ||
-        nextCol < normalizedBounds.minCol || nextCol > normalizedBounds.maxCol
+        nextRow < normalizedBounds.minRow ||
+        nextRow > normalizedBounds.maxRow ||
+        nextCol < normalizedBounds.minCol ||
+        nextCol > normalizedBounds.maxCol
       ) {
         continue
       }
@@ -447,14 +535,14 @@ function findPathInternal(
       if (previousG !== undefined && nextG >= previousG) continue
 
       gMap.set(nextKey, nextG)
-    open.push({
-      col: nextCol,
-      row: nextRow,
-      g: nextG,
-      f: nextG + heuristic(nextCol, nextRow, tc, tr),
-      parent: current,
-      portalId: undefined,
-    })
+      open.push({
+        col: nextCol,
+        row: nextRow,
+        g: nextG,
+        f: nextG + heuristic(nextCol, nextRow, tc, tr),
+        parent: current,
+        portalId: undefined,
+      })
     }
   }
 
@@ -470,7 +558,7 @@ function findChunkRoute(
   mesh: boolean[][],
   from: [number, number],
   to: [number, number],
-  chunkSize: number,
+  chunkSize: number
 ): PortalRoute | null {
   const graph = getChunkGraph(mesh, chunkSize)
   const fromChunk = worldToChunk(from[0], from[1], chunkSize)
@@ -497,12 +585,19 @@ function findChunkRoute(
   const best = new Map<string, number>()
   const parents = new Map<string, string | null>()
 
-  startPortals.forEach((portalId) => {
+  startPortals.forEach(portalId => {
     const portal = graph.nodes.get(portalId)
     if (!portal) return
     const g = heuristic(from[0], from[1], portal.col, portal.row)
     const h = getPortalHeuristic(portal, endNodes)
-    open.push({ col: portal.col, row: portal.row, g, f: g + h, parent: null, portalId })
+    open.push({
+      col: portal.col,
+      row: portal.row,
+      g,
+      f: g + h,
+      parent: null,
+      portalId,
+    })
     best.set(portalId, g)
     parents.set(portalId, null)
   })
@@ -556,7 +651,7 @@ function findChunkRoute(
   portalPath.reverse()
 
   const routeChunks: string[] = [startKey]
-  portalPath.forEach((portalId) => {
+  portalPath.forEach(portalId => {
     const node = graph.nodes.get(portalId)
     if (!node) return
     if (routeChunks[routeChunks.length - 1] !== node.chunkKey) {
@@ -570,11 +665,17 @@ function findChunkRoute(
   return { chunkKeys: routeChunks }
 }
 
-function getPortalHeuristic(portal: PortalNode, endNodes: PortalNode[]): number {
+function getPortalHeuristic(
+  portal: PortalNode,
+  endNodes: PortalNode[]
+): number {
   if (endNodes.length === 0) return 0
   let best = Infinity
-  endNodes.forEach((endNode) => {
-    best = Math.min(best, heuristic(portal.col, portal.row, endNode.col, endNode.row))
+  endNodes.forEach(endNode => {
+    best = Math.min(
+      best,
+      heuristic(portal.col, portal.row, endNode.col, endNode.row)
+    )
   })
   return best
 }
@@ -583,7 +684,7 @@ function getBoundsForChunkRoute(
   mesh: boolean[][],
   route: string[],
   chunkSize: number,
-  padding: number,
+  padding: number
 ): SearchBounds {
   const rows = mesh.length
   const cols = mesh[0]?.length ?? 0
@@ -592,7 +693,7 @@ function getBoundsForChunkRoute(
   let minCy = Infinity
   let maxCy = -Infinity
 
-  route.forEach((key) => {
+  route.forEach(key => {
     const { cx, cy } = parseChunkKey(key)
     minCx = Math.min(minCx, cx)
     maxCx = Math.max(maxCx, cx)
@@ -601,9 +702,9 @@ function getBoundsForChunkRoute(
   })
 
   const minCol = (minCx - padding) * chunkSize
-  const maxCol = ((maxCx + padding + 1) * chunkSize) - 1
+  const maxCol = (maxCx + padding + 1) * chunkSize - 1
   const minRow = (minCy - padding) * chunkSize
-  const maxRow = ((maxCy + padding + 1) * chunkSize) - 1
+  const maxRow = (maxCy + padding + 1) * chunkSize - 1
 
   return {
     minCol: Math.max(0, minCol),
@@ -620,7 +721,7 @@ function getBoundsForChunkRoute(
 export function findPath(
   mesh: boolean[][],
   from: [number, number],
-  to: [number, number],
+  to: [number, number]
 ): [number, number][] {
   return findPathInternal(mesh, from, to)
 }
@@ -632,7 +733,7 @@ export function findPathInBounds(
   mesh: boolean[][],
   from: [number, number],
   to: [number, number],
-  bounds: SearchBounds,
+  bounds: SearchBounds
 ): [number, number][] {
   return findPathInternal(mesh, from, to, bounds)
 }
@@ -647,7 +748,7 @@ export function findPathChunked(
   mesh: boolean[][],
   from: [number, number],
   to: [number, number],
-  options: ChunkedPathOptions = {},
+  options: ChunkedPathOptions = {}
 ): [number, number][] {
   const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE
   const chunkPadding = options.chunkPadding ?? 0
@@ -659,14 +760,19 @@ export function findPathChunked(
       mesh,
       [chunkKey(fromChunk.cx, fromChunk.cy)],
       chunkSize,
-      chunkPadding,
+      chunkPadding
     )
     return findPathInternal(mesh, from, to, bounds)
   }
 
   const route = findChunkRoute(mesh, from, to, chunkSize)
   if (route && route.chunkKeys.length > 0) {
-    const bounds = getBoundsForChunkRoute(mesh, route.chunkKeys, chunkSize, chunkPadding)
+    const bounds = getBoundsForChunkRoute(
+      mesh,
+      route.chunkKeys,
+      chunkSize,
+      chunkPadding
+    )
     const boundedPath = findPathInternal(mesh, from, to, bounds)
     if (boundedPath.length > 0) {
       return boundedPath
@@ -674,6 +780,17 @@ export function findPathChunked(
   }
 
   return findPathInternal(mesh, from, to)
+}
+
+// ── Cache cleanup ────────────────────────────────────────────────
+
+/**
+ * Clear all pathfinding caches. Call on scene switch to free memory.
+ */
+export function clearPathCache(): void {
+  PATH_CACHE.clear()
+  _walkableAll = null
+  _walkableMesh = null
 }
 
 // ── Walkable tile index ─────────────────────────────────────────
@@ -698,7 +815,7 @@ function ensureWalkableIndex(mesh: boolean[][]) {
 export function randomWalkableTile(
   mesh: boolean[][],
   nearRow?: number,
-  rowRange: number = 6,
+  rowRange: number = 6
 ): [number, number] {
   ensureWalkableIndex(mesh)
   if (!_walkableAll || _walkableAll.length === 0) return [0, 0]

@@ -7,7 +7,7 @@
  */
 
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
-import type { SceneConfig, SceneObject, TileType } from '@/engine/sceneTiles'
+import type { SceneConfig, TileType } from '@/engine/sceneTiles'
 import { TILE_COLORS } from '@/engine/sceneTiles'
 import { isFurnitureKey } from '@/engine/three/StreetFurniture3D'
 
@@ -16,31 +16,31 @@ const tileColor = (t: TileType): string => TILE_COLORS[t]?.base ?? '#222'
 
 // ── Object category colors ───────────────────────────────────────────
 const OBJ_COLORS: Record<string, string> = {
-  landmark_civic:  '#FF6B6B',
+  landmark_civic: '#FF6B6B',
   landmark_pingan: '#FF4444',
-  landmark_expo:   '#FF8866',
-  landmark_kk100:  '#FF5555',
-  office_tower:  '#4488FF',
-  cbd_building:  '#3366DD',
+  landmark_expo: '#FF8866',
+  landmark_kk100: '#FF5555',
+  office_tower: '#4488FF',
+  cbd_building: '#3366DD',
   apartment_block: '#88AACC',
   village_building: '#AA8866',
   shop_building: '#FFAA44',
-  palm_tree:     '#22CC44',
-  street_tree:   '#33AA33',
+  palm_tree: '#22CC44',
+  street_tree: '#33AA33',
   traffic_light: '#FF4444',
-  street_lamp:   '#FFDD44',
-  road_sign:     '#FF8800',
-  bench:         '#886644',
-  metro_entrance:'#2255CC',
-  fountain:      '#44BBFF',
-  fire_hydrant:  '#FF2222',
-  trash_bin:     '#6688AA',
-  bus_stop:      '#FF6600',
-  bollard:       '#999999',
-  phone_booth:   '#CC4444',
-  mailbox:       '#2244AA',
-  flower_bed:    '#FF88CC',
-  billboard:     '#DDAA00',
+  street_lamp: '#FFDD44',
+  road_sign: '#FF8800',
+  bench: '#886644',
+  metro_entrance: '#2255CC',
+  fountain: '#44BBFF',
+  fire_hydrant: '#FF2222',
+  trash_bin: '#6688AA',
+  bus_stop: '#FF6600',
+  bollard: '#999999',
+  phone_booth: '#CC4444',
+  mailbox: '#2244AA',
+  flower_bed: '#FF88CC',
+  billboard: '#DDAA00',
 }
 
 function objColor(key: string): string {
@@ -83,14 +83,22 @@ export default function CityPlanView({ sceneConfig }: Props) {
   // Pan & zoom state
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
   const dragging = useRef(false)
   const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 })
 
-  const { cols, rows, tilemap, objects, roadLabels, landmarkLabels } = sceneConfig
+  const { cols, rows, tilemap, objects, roadLabels, landmarkLabels } =
+    sceneConfig
 
   // Separate buildings from furniture (memoized to avoid re-creating arrays on every render)
-  const buildings = useMemo(() => objects.filter(o => o.pngKey && !isFurnitureKey(o.pngKey)), [objects])
-  const furniture = useMemo(() => objects.filter(o => o.pngKey && isFurnitureKey(o.pngKey)), [objects])
+  const buildings = useMemo(
+    () => objects.filter(o => o.pngKey && !isFurnitureKey(o.pngKey)),
+    [objects]
+  )
+  const furniture = useMemo(
+    () => objects.filter(o => o.pngKey && isFurnitureKey(o.pngKey)),
+    [objects]
+  )
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -128,7 +136,7 @@ export default function CityPlanView({ sceneConfig }: Props) {
           baseX + c * pxPerTile,
           baseY + r * pxPerTile,
           pxPerTile + 0.5,
-          pxPerTile + 0.5,
+          pxPerTile + 0.5
         )
       }
     }
@@ -229,7 +237,12 @@ export default function CityPlanView({ sceneConfig }: Props) {
         ctx.setLineDash([4, 3])
         ctx.strokeStyle = '#FF6B6B88'
         ctx.lineWidth = 1.5
-        ctx.strokeRect(baseX + lm.col * pxPerTile, baseY + lm.row * pxPerTile, lw, lh)
+        ctx.strokeRect(
+          baseX + lm.col * pxPerTile,
+          baseY + lm.row * pxPerTile,
+          lw,
+          lh
+        )
         ctx.setLineDash([])
 
         // Name
@@ -253,10 +266,22 @@ export default function CityPlanView({ sceneConfig }: Props) {
     ctx.fillText(`Grid: ${cols} × ${rows}`, 14, 14)
     ctx.fillText(`Buildings: ${buildings.length}`, 14, 28)
     ctx.fillText(`Furniture: ${furniture.length}`, 14, 42)
-  }, [cols, rows, tilemap, buildings, furniture, zoom, offset, roadLabels, landmarkLabels])
+  }, [
+    cols,
+    rows,
+    tilemap,
+    buildings,
+    furniture,
+    zoom,
+    offset,
+    roadLabels,
+    landmarkLabels,
+  ])
 
   // Redraw on any state change
-  useEffect(() => { draw() }, [draw])
+  useEffect(() => {
+    draw()
+  }, [draw])
 
   // Resize observer
   useEffect(() => {
@@ -268,10 +293,19 @@ export default function CityPlanView({ sceneConfig }: Props) {
   }, [draw])
 
   // Mouse handlers
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    dragging.current = true
-    dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y }
-  }, [offset])
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      dragging.current = true
+      setIsDragging(true)
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        ox: offset.x,
+        oy: offset.y,
+      }
+    },
+    [offset]
+  )
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragging.current) return
@@ -281,7 +315,10 @@ export default function CityPlanView({ sceneConfig }: Props) {
     })
   }, [])
 
-  const onMouseUp = useCallback(() => { dragging.current = false }, [])
+  const onMouseUp = useCallback(() => {
+    dragging.current = false
+    setIsDragging(false)
+  }, [])
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
@@ -289,12 +326,16 @@ export default function CityPlanView({ sceneConfig }: Props) {
   }, [])
 
   return (
-    <div ref={containerRef} className="relative w-full h-full" style={{ background: '#0d1117' }}>
+    <div
+      ref={containerRef}
+      className="relative w-full h-full"
+      style={{ background: '#0d1117' }}
+    >
       <canvas
         ref={canvasRef}
         data-testid="scene-plan-canvas"
         className="w-full h-full"
-        style={{ cursor: dragging.current ? 'grabbing' : 'grab', display: 'block' }}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab', display: 'block' }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -319,7 +360,7 @@ export default function CityPlanView({ sceneConfig }: Props) {
               />
               <span className="text-white/60">{item.label}</span>
             </div>
-          ),
+          )
         )}
       </div>
 

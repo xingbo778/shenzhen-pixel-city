@@ -12,52 +12,55 @@
 import * as THREE from 'three'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'
 import type { SceneObject } from '../sceneTiles'
-import { TILE_SIZE }        from './ThreeScene'
-import { isFurnitureKey }   from './StreetFurniture3D'
+import { TILE_SIZE } from './ThreeScene'
+import { isFurnitureKey } from './StreetFurniture3D'
 
 // ── Building base height table ───────────────────────────────────────
 const MODEL_META: Record<string, { h: number; color: string }> = {
-  office_tower:       { h: 6.0, color: '#4488BB' },
-  office_tower_v1:    { h: 5.5, color: '#44AA88' },
-  office_tower_v2:    { h: 7.0, color: '#8899BB' },
-  office_tower_v3:    { h: 6.5, color: '#5599CC' },
-  office_tower_v4:    { h: 5.8, color: '#445566' },
-  office_tower_v5:    { h: 7.5, color: '#6699CC' },
-  cbd_building:       { h: 4.5, color: '#336699' },
-  cbd_building_v1:    { h: 4.0, color: '#667788' },
-  cbd_building_v2:    { h: 5.0, color: '#AA9955' },
-  cbd_building_v3:    { h: 4.2, color: '#778899' },
-  cbd_building_v4:    { h: 5.5, color: '#BBAA88' },
-  cbd_building_v5:    { h: 4.8, color: '#DDDDDD' },
-  apartment_block:    { h: 3.0, color: '#AA9977' },
+  office_tower: { h: 6.0, color: '#4488BB' },
+  office_tower_v1: { h: 5.5, color: '#44AA88' },
+  office_tower_v2: { h: 7.0, color: '#8899BB' },
+  office_tower_v3: { h: 6.5, color: '#5599CC' },
+  office_tower_v4: { h: 5.8, color: '#445566' },
+  office_tower_v5: { h: 7.5, color: '#6699CC' },
+  cbd_building: { h: 4.5, color: '#336699' },
+  cbd_building_v1: { h: 4.0, color: '#667788' },
+  cbd_building_v2: { h: 5.0, color: '#AA9955' },
+  cbd_building_v3: { h: 4.2, color: '#778899' },
+  cbd_building_v4: { h: 5.5, color: '#BBAA88' },
+  cbd_building_v5: { h: 4.8, color: '#DDDDDD' },
+  apartment_block: { h: 3.0, color: '#AA9977' },
   apartment_block_v1: { h: 2.6, color: '#88AABB' },
   apartment_block_v2: { h: 2.8, color: '#CC8877' },
   apartment_block_v3: { h: 3.2, color: '#999999' },
   apartment_block_v4: { h: 2.5, color: '#CCBB66' },
-  shop_building:      { h: 1.5, color: '#CCAA66' },
-  shop_building_v1:   { h: 1.3, color: '#CC7744' },
-  shop_building_v2:   { h: 1.4, color: '#EEEEEE' },
-  shop_building_v3:   { h: 1.6, color: '#889999' },
-  village_building:   { h: 2.5, color: '#888877' },
-  village_building_v1:{ h: 2.2, color: '#AA7744' },
-  village_building_v2:{ h: 2.3, color: '#668866' },
-  village_building_v3:{ h: 2.4, color: '#777766' },
-  palm_tree:          { h: 2.0, color: '#226611' },
-  street_tree:        { h: 1.5, color: '#336622' },
-  metro_entrance:     { h: 0.8, color: '#114499' },
-  fountain:           { h: 0.5, color: '#4488CC' },
+  shop_building: { h: 1.5, color: '#CCAA66' },
+  shop_building_v1: { h: 1.3, color: '#CC7744' },
+  shop_building_v2: { h: 1.4, color: '#EEEEEE' },
+  shop_building_v3: { h: 1.6, color: '#889999' },
+  village_building: { h: 2.5, color: '#888877' },
+  village_building_v1: { h: 2.2, color: '#AA7744' },
+  village_building_v2: { h: 2.3, color: '#668866' },
+  village_building_v3: { h: 2.4, color: '#777766' },
+  palm_tree: { h: 2.0, color: '#226611' },
+  street_tree: { h: 1.5, color: '#336622' },
+  metro_entrance: { h: 0.8, color: '#114499' },
+  fountain: { h: 0.5, color: '#4488CC' },
   // Landmarks
-  landmark_civic:     { h: 4.0, color: '#CCDDEE' },
-  landmark_pingan:    { h: 18.0, color: '#88AACC' },
-  landmark_expo:      { h: 3.0, color: '#BBCCDD' },
-  landmark_kk100:     { h: 14.0, color: '#6688AA' },
+  landmark_civic: { h: 4.0, color: '#CCDDEE' },
+  landmark_pingan: { h: 18.0, color: '#88AACC' },
+  landmark_expo: { h: 3.0, color: '#BBCCDD' },
+  landmark_kk100: { h: 14.0, color: '#6688AA' },
 }
 
 const DEFAULT_META = { h: 2.0, color: '#666677' }
 
 // ── Landmark keys ────────────────────────────────────────────────────
 const LANDMARK_KEYS = new Set([
-  'landmark_civic', 'landmark_pingan', 'landmark_expo', 'landmark_kk100',
+  'landmark_civic',
+  'landmark_pingan',
+  'landmark_expo',
+  'landmark_kk100',
 ])
 
 function isLandmarkKey(key: string): boolean {
@@ -66,9 +69,9 @@ function isLandmarkKey(key: string): boolean {
 
 // ── Texture loading ──────────────────────────────────────────────────
 const texLoader = new THREE.TextureLoader()
-const texCache  = new Map<string, THREE.Texture>()
+const texCache = new Map<string, THREE.Texture>()
 const texPromiseCache = new Map<string, Promise<THREE.Texture>>()
-const matCache  = new Map<string, THREE.MeshLambertMaterial>()
+const matCache = new Map<string, THREE.MeshLambertMaterial>()
 const assetExistsCache = new Map<string, Promise<boolean>>()
 let ktx2Loader: KTX2Loader | null = null
 let ktx2Enabled = false
@@ -104,7 +107,7 @@ function loadPngTexture(url: string): Promise<THREE.Texture> {
       error => {
         texPromiseCache.delete(url)
         reject(error)
-      },
+      }
     )
   })
 
@@ -115,7 +118,8 @@ function loadPngTexture(url: string): Promise<THREE.Texture> {
 function loadKtx2Texture(url: string): Promise<THREE.Texture> {
   if (texCache.has(url)) return Promise.resolve(texCache.get(url)!)
   if (texPromiseCache.has(url)) return texPromiseCache.get(url)!
-  if (!ktx2Loader) return Promise.reject(new Error('KTX2 loader is not initialized'))
+  if (!ktx2Loader)
+    return Promise.reject(new Error('KTX2 loader is not initialized'))
 
   const pending = new Promise<THREE.Texture>((resolve, reject) => {
     ktx2Loader!.load(
@@ -130,7 +134,7 @@ function loadKtx2Texture(url: string): Promise<THREE.Texture> {
       error => {
         texPromiseCache.delete(url)
         reject(error)
-      },
+      }
     )
   })
 
@@ -144,8 +148,13 @@ async function assetExists(url: string): Promise<boolean> {
   const pending = fetch(url, { method: 'HEAD' })
     .then(response => {
       if (!response.ok) return false
-      const contentType = (response.headers.get('content-type') || '').toLowerCase()
-      return contentType.includes('image/ktx2') || contentType.includes('application/octet-stream')
+      const contentType = (
+        response.headers.get('content-type') || ''
+      ).toLowerCase()
+      return (
+        contentType.includes('image/ktx2') ||
+        contentType.includes('application/octet-stream')
+      )
     })
     .catch(() => false)
 
@@ -155,11 +164,14 @@ async function assetExists(url: string): Promise<boolean> {
 
 async function loadTex(urlBase: string): Promise<THREE.Texture> {
   const ktx2Url = `${urlBase}.ktx2`
-  if (ktx2Enabled && await assetExists(ktx2Url)) {
+  if (ktx2Enabled && (await assetExists(ktx2Url))) {
     try {
       return await loadKtx2Texture(ktx2Url)
     } catch (error) {
-      console.warn(`[Buildings3D] Failed to load KTX2 texture ${ktx2Url}, falling back to PNG`, error)
+      console.warn(
+        `[Buildings3D] Failed to load KTX2 texture ${ktx2Url}, falling back to PNG`,
+        error
+      )
     }
   }
   return loadPngTexture(`${urlBase}.png`)
@@ -169,7 +181,7 @@ async function getBuildingTextures(key: string) {
   const base = `/sprites/buildings/textures/${key}`
   return {
     facade: await loadTex(`${base}_facade`),
-    roof:   await loadTex(`${base}_roof`),
+    roof: await loadTex(`${base}_roof`),
   }
 }
 
@@ -194,35 +206,50 @@ function buildLandmarkCivic(width: number, depth: number): THREE.Object3D {
   // 市民中心 — low curved roof with wings, like a giant bird
   const obj = new THREE.Object3D()
   const bodyH = 2.5
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xDDEEFF })
-  const glassMat = new THREE.MeshLambertMaterial({ color: 0x88BBDD, transparent: true, opacity: 0.6 })
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xddeeff })
+  const glassMat = new THREE.MeshLambertMaterial({
+    color: 0x88bbdd,
+    transparent: true,
+    opacity: 0.6,
+  })
 
   // Central dome
   const domeR = Math.min(width, depth) * 0.3
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(domeR, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    glassMat,
+    glassMat
   )
   dome.position.y = bodyH
   obj.add(dome)
 
   // Main body — wide flat box
-  const body = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, depth), bodyMat)
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(width, bodyH, depth),
+    bodyMat
+  )
   body.position.y = bodyH / 2
   obj.add(body)
 
   // Wing extensions
-  const wingW = width * 0.15, wingH = bodyH * 0.6, wingD = depth * 1.1
-  const wingMat = new THREE.MeshLambertMaterial({ color: 0xCCDDEE })
+  const wingW = width * 0.15,
+    wingH = bodyH * 0.6,
+    wingD = depth * 1.1
+  const wingMat = new THREE.MeshLambertMaterial({ color: 0xccddee })
   for (const side of [-1, 1]) {
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(wingW, wingH, wingD), wingMat)
+    const wing = new THREE.Mesh(
+      new THREE.BoxGeometry(wingW, wingH, wingD),
+      wingMat
+    )
     wing.position.set(side * (width / 2 + wingW / 2), wingH / 2, 0)
     obj.add(wing)
   }
 
   // Roof overhang
   const roofGeo = new THREE.BoxGeometry(width * 1.15, 0.15, depth * 1.15)
-  const roof = new THREE.Mesh(roofGeo, new THREE.MeshLambertMaterial({ color: 0xEEEEEE }))
+  const roof = new THREE.Mesh(
+    roofGeo,
+    new THREE.MeshLambertMaterial({ color: 0xeeeeee })
+  )
   roof.position.y = bodyH
   obj.add(roof)
 
@@ -236,34 +263,36 @@ function buildLandmarkPingan(width: number, depth: number): THREE.Object3D {
 
   // Main tower — tapered
   const towerGeo = new THREE.CylinderGeometry(
-    Math.min(width, depth) * 0.25,  // top radius (narrower)
-    Math.min(width, depth) * 0.4,   // bottom radius
+    Math.min(width, depth) * 0.25, // top radius (narrower)
+    Math.min(width, depth) * 0.4, // bottom radius
     totalH * 0.85,
-    8,
+    8
   )
-  const towerMat = new THREE.MeshLambertMaterial({ color: 0x88AACC })
+  const towerMat = new THREE.MeshLambertMaterial({ color: 0x88aacc })
   const tower = new THREE.Mesh(towerGeo, towerMat)
-  tower.position.y = totalH * 0.85 / 2
+  tower.position.y = (totalH * 0.85) / 2
   obj.add(tower)
 
   // Glass curtain wall effect — slightly larger transparent shell
   const glassMat = new THREE.MeshLambertMaterial({
-    color: 0xAADDFF, transparent: true, opacity: 0.3,
+    color: 0xaaddff,
+    transparent: true,
+    opacity: 0.3,
   })
   const glassGeo = new THREE.CylinderGeometry(
     Math.min(width, depth) * 0.26,
     Math.min(width, depth) * 0.41,
     totalH * 0.85,
-    8,
+    8
   )
   const glass = new THREE.Mesh(glassGeo, glassMat)
-  glass.position.y = totalH * 0.85 / 2
+  glass.position.y = (totalH * 0.85) / 2
   obj.add(glass)
 
   // Spire
   const spireH = totalH * 0.15
   const spireGeo = new THREE.ConeGeometry(0.15, spireH, 4)
-  const spireMat = new THREE.MeshLambertMaterial({ color: 0xCCCCCC })
+  const spireMat = new THREE.MeshLambertMaterial({ color: 0xcccccc })
   const spire = new THREE.Mesh(spireGeo, spireMat)
   spire.position.y = totalH * 0.85 + spireH / 2
   obj.add(spire)
@@ -272,7 +301,7 @@ function buildLandmarkPingan(width: number, depth: number): THREE.Object3D {
   const podiumH = 1.5
   const podium = new THREE.Mesh(
     new THREE.BoxGeometry(width * 0.9, podiumH, depth * 0.9),
-    new THREE.MeshLambertMaterial({ color: 0x667788 }),
+    new THREE.MeshLambertMaterial({ color: 0x667788 })
   )
   podium.position.y = podiumH / 2
   obj.add(podium)
@@ -284,19 +313,31 @@ function buildLandmarkExpo(width: number, depth: number): THREE.Object3D {
   // 会展中心 — long, low, wavy-roofed exhibition hall
   const obj = new THREE.Object3D()
   const bodyH = 2.5
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xBBCCDD })
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xbbccdd })
 
   // Main body
-  const body = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, depth), bodyMat)
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(width, bodyH, depth),
+    bodyMat
+  )
   body.position.y = bodyH / 2
   obj.add(body)
 
   // Wavy roof segments
   const segments = 5
   const segW = width / segments
-  const roofMat = new THREE.MeshLambertMaterial({ color: 0xEEEEFF })
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xeeeeff })
   for (let i = 0; i < segments; i++) {
-    const archGeo = new THREE.CylinderGeometry(segW * 0.4, segW * 0.4, depth * 0.95, 8, 1, false, 0, Math.PI)
+    const archGeo = new THREE.CylinderGeometry(
+      segW * 0.4,
+      segW * 0.4,
+      depth * 0.95,
+      8,
+      1,
+      false,
+      0,
+      Math.PI
+    )
     const arch = new THREE.Mesh(archGeo, roofMat)
     arch.rotation.z = Math.PI / 2
     arch.rotation.y = Math.PI / 2
@@ -305,8 +346,15 @@ function buildLandmarkExpo(width: number, depth: number): THREE.Object3D {
   }
 
   // Glass entrance
-  const entranceMat = new THREE.MeshLambertMaterial({ color: 0x88BBDD, transparent: true, opacity: 0.5 })
-  const entrance = new THREE.Mesh(new THREE.BoxGeometry(width * 0.3, bodyH * 0.8, 0.3), entranceMat)
+  const entranceMat = new THREE.MeshLambertMaterial({
+    color: 0x88bbdd,
+    transparent: true,
+    opacity: 0.5,
+  })
+  const entrance = new THREE.Mesh(
+    new THREE.BoxGeometry(width * 0.3, bodyH * 0.8, 0.3),
+    entranceMat
+  )
   entrance.position.set(0, bodyH * 0.4, depth / 2 + 0.15)
   obj.add(entrance)
 
@@ -326,7 +374,10 @@ function buildLandmarkKK100(width: number, depth: number): THREE.Object3D {
     const sW = width * 0.7 * taper
     const sD = depth * 0.7 * taper
     const mat = new THREE.MeshLambertMaterial({
-      color: new THREE.Color(0x6688AA).lerp(new THREE.Color(0x88AACC), i / sections),
+      color: new THREE.Color(0x6688aa).lerp(
+        new THREE.Color(0x88aacc),
+        i / sections
+      ),
     })
     const section = new THREE.Mesh(new THREE.BoxGeometry(sW, sectionH, sD), mat)
     section.position.y = sectionH * i + sectionH / 2
@@ -337,7 +388,7 @@ function buildLandmarkKK100(width: number, depth: number): THREE.Object3D {
   const crownH = 1.0
   const crown = new THREE.Mesh(
     new THREE.CylinderGeometry(0.2, width * 0.15, crownH, 6),
-    new THREE.MeshLambertMaterial({ color: 0xCCCCCC }),
+    new THREE.MeshLambertMaterial({ color: 0xcccccc })
   )
   crown.position.y = totalH + crownH / 2
   obj.add(crown)
@@ -345,15 +396,25 @@ function buildLandmarkKK100(width: number, depth: number): THREE.Object3D {
   return obj
 }
 
-function buildLandmarkLOD(key: string, width: number, depth: number): THREE.Object3D | null {
-  let detailed: THREE.Object3D | null = null
-  switch (key) {
-    case 'landmark_civic':  detailed = buildLandmarkCivic(width, depth); break
-    case 'landmark_pingan': detailed = buildLandmarkPingan(width, depth); break
-    case 'landmark_expo':   detailed = buildLandmarkExpo(width, depth); break
-    case 'landmark_kk100':  detailed = buildLandmarkKK100(width, depth); break
-    default: return null
-  }
+function buildLandmarkLOD(
+  key: string,
+  width: number,
+  depth: number
+): THREE.Object3D | null {
+  const detailed = (() => {
+    switch (key) {
+      case 'landmark_civic':
+        return buildLandmarkCivic(width, depth)
+      case 'landmark_pingan':
+        return buildLandmarkPingan(width, depth)
+      case 'landmark_expo':
+        return buildLandmarkExpo(width, depth)
+      case 'landmark_kk100':
+        return buildLandmarkKK100(width, depth)
+      default:
+        return null
+    }
+  })()
   if (!detailed) return null
 
   const meta = MODEL_META[key] ?? DEFAULT_META
@@ -364,8 +425,13 @@ function buildLandmarkLOD(key: string, width: number, depth: number): THREE.Obje
 
   // Level 1: simple box (far range, > 60 units)
   const simpleH = meta.h
-  const simpleMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(meta.color) })
-  const simpleBox = new THREE.Mesh(new THREE.BoxGeometry(width, simpleH, depth), simpleMat)
+  const simpleMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(meta.color),
+  })
+  const simpleBox = new THREE.Mesh(
+    new THREE.BoxGeometry(width, simpleH, depth),
+    simpleMat
+  )
   simpleBox.position.y = simpleH / 2
   const simpleGroup = new THREE.Object3D()
   simpleGroup.add(simpleBox)
@@ -376,42 +442,48 @@ function buildLandmarkLOD(key: string, width: number, depth: number): THREE.Obje
 
 // ── Build a single building sized to its tile footprint ──────────────
 
-const MARGIN = 0.12  // gap between building edge and tile boundary
+const MARGIN = 0.12 // gap between building edge and tile boundary
 
 function buildTexturedBox(
   key: string,
   heightScale: number,
   tileW: number,
   tileH: number,
-  textures: { facade: THREE.Texture; roof: THREE.Texture },
+  textures: { facade: THREE.Texture; roof: THREE.Texture }
 ): THREE.Object3D {
-  const meta  = MODEL_META[key] ?? DEFAULT_META
+  const meta = MODEL_META[key] ?? DEFAULT_META
   const color = new THREE.Color(meta.color)
 
   // Footprint: exactly tileW × tileH tiles, minus margin
-  const width  = tileW * TILE_SIZE - MARGIN * 2
-  const depth  = tileH * TILE_SIZE - MARGIN * 2
+  const width = tileW * TILE_SIZE - MARGIN * 2
+  const depth = tileH * TILE_SIZE - MARGIN * 2
 
   // Height: base height × heightScale with slight random variation
-  const hv     = 0.85 + sr() * 0.3
+  const hv = 0.85 + sr() * 0.3
   const height = meta.h * heightScale * hv
 
   const { facade, roof } = textures
 
   const facadeKey = `facade:${key}`
-  const roofKey   = `roof:${key}`
+  const roofKey = `roof:${key}`
   const bottomKey = 'bottom'
-  if (!matCache.has(facadeKey)) matCache.set(facadeKey, new THREE.MeshLambertMaterial({ map: facade }))
-  if (!matCache.has(roofKey))   matCache.set(roofKey,   new THREE.MeshLambertMaterial({ map: roof }))
-  if (!matCache.has(bottomKey)) matCache.set(bottomKey, new THREE.MeshLambertMaterial({ color: 0x222222 }))
+  if (!matCache.has(facadeKey))
+    matCache.set(facadeKey, new THREE.MeshLambertMaterial({ map: facade }))
+  if (!matCache.has(roofKey))
+    matCache.set(roofKey, new THREE.MeshLambertMaterial({ map: roof }))
+  if (!matCache.has(bottomKey))
+    matCache.set(bottomKey, new THREE.MeshLambertMaterial({ color: 0x222222 }))
   const facadeMat = matCache.get(facadeKey)!
-  const roofMat   = matCache.get(roofKey)!
+  const roofMat = matCache.get(roofKey)!
   const bottomMat = matCache.get(bottomKey)!
 
   const materials = [
-    facadeMat, facadeMat,   // +x, -x
-    roofMat,   bottomMat,   // +y, -y
-    facadeMat, facadeMat,   // +z, -z
+    facadeMat,
+    facadeMat, // +x, -x
+    roofMat,
+    bottomMat, // +y, -y
+    facadeMat,
+    facadeMat, // +z, -z
   ]
 
   const obj = new THREE.Object3D()
@@ -419,9 +491,9 @@ function buildTexturedBox(
   // Main body
   const geom = new THREE.BoxGeometry(width, height, depth)
   const mesh = new THREE.Mesh(geom, materials)
-  mesh.castShadow    = false
+  mesh.castShadow = false
   mesh.receiveShadow = false
-  mesh.position.y    = height / 2
+  mesh.position.y = height / 2
   obj.add(mesh)
 
   // Stepped setback for tall buildings
@@ -430,11 +502,16 @@ function buildTexturedBox(
     const setbackW = width * 0.65
     const setbackD = depth * 0.65
     const setbackGeom = new THREE.BoxGeometry(setbackW, setbackH, setbackD)
-    const setbackMat = new THREE.MeshLambertMaterial({ color: color.clone().multiplyScalar(0.9) })
+    const setbackMat = new THREE.MeshLambertMaterial({
+      color: color.clone().multiplyScalar(0.9),
+    })
     const setback = new THREE.Mesh(setbackGeom, [
-      setbackMat, setbackMat,
-      roofMat, setbackMat,
-      setbackMat, setbackMat,
+      setbackMat,
+      setbackMat,
+      roofMat,
+      setbackMat,
+      setbackMat,
+      setbackMat,
     ])
     setback.castShadow = true
     setback.position.y = height + setbackH / 2
@@ -460,21 +537,25 @@ function buildTexturedBox(
 // ── Public API ────────────────────────────────────────────────────────
 
 export interface Buildings3DHandle {
-  group:   THREE.Group
+  group: THREE.Group
   updateLOD: (camera: THREE.Camera) => void
   dispose: () => void
 }
 
-export async function buildBuildings3D(objects: SceneObject[]): Promise<Buildings3DHandle> {
+export async function buildBuildings3D(
+  objects: SceneObject[]
+): Promise<Buildings3DHandle> {
   const group = new THREE.Group()
   _seed = 12345
-  const textureKeys = Array.from(new Set(
-    objects
-      .map(obj => obj.pngKey ?? '')
-      .filter(key => !!key && !isFurnitureKey(key) && !isLandmarkKey(key)),
-  ))
+  const textureKeys = Array.from(
+    new Set(
+      objects
+        .map(obj => obj.pngKey ?? '')
+        .filter(key => !!key && !isFurnitureKey(key) && !isLandmarkKey(key))
+    )
+  )
   const textureEntries = await Promise.all(
-    textureKeys.map(async key => [key, await getBuildingTextures(key)] as const),
+    textureKeys.map(async key => [key, await getBuildingTextures(key)] as const)
   )
   const texturesByKey = new Map(textureEntries)
 
@@ -535,6 +616,8 @@ export async function buildBuildings3D(objects: SceneObject[]): Promise<Building
 }
 
 export function preloadBuildings(keys: string[]): void {
-  const filtered = keys.filter(key => !isFurnitureKey(key) && !isLandmarkKey(key))
+  const filtered = keys.filter(
+    key => !isFurnitureKey(key) && !isLandmarkKey(key)
+  )
   void Promise.all(filtered.map(k => getBuildingTextures(k)))
 }
