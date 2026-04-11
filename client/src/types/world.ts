@@ -152,6 +152,35 @@ export interface WorldModification {
   time: string
 }
 
+export interface OpenLoopState {
+  id: string
+  title: string
+  type: string
+  owner_bot_id: string
+  related_bot_ids: string[]
+  emotional_weight: number
+  urgency: number
+  status: string
+  description: string
+}
+
+export interface RelationshipEdge {
+  from: string
+  to: string
+  affinity: number
+  trust: number
+  status: string
+}
+
+export interface StoryArcState {
+  id: string
+  title: string
+  type: string
+  participants: string[]
+  phase: string
+  description: string
+}
+
 export interface WorldState {
   time: WorldTime
   weather: Weather
@@ -164,6 +193,10 @@ export interface WorldState {
   world_modifications: WorldModification[]
   generation_count: number
   graveyard: BotState[]
+  // Narrative engine (optional, only present when engine provides them)
+  open_loops?: OpenLoopState[]
+  relationships?: RelationshipEdge[]
+  story_arcs?: StoryArcState[]
 }
 
 // 地图配置：各地点的坐标（百分比）和图标

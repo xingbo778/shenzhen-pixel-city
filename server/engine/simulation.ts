@@ -10,6 +10,9 @@ import { maybeGenerateMoment } from './momentGenerator.js'
 import { maybeGenerateNews, maybeGenerateEvent, maybeRotateHotTopics } from './newsGenerator.js'
 import { processMessages, queueMessage as queueMsg } from './messageHandler.js'
 import { getAIBotIds, getAIDecision, applyDecision } from './aiDecision.js'
+import { initLoops, tickLoops, detectNewLoops, getOpenLoops, getCrisisLoopBotIds } from './openLoops.js'
+import { initRelationships, tickRelationships, getRelationshipsFlat } from './relationships.js'
+import { initArcs, detectArcs, tickArcs, getArcPriorityBotIds, generateArcNarrative, getArcsFlat } from './storyArcs.js'
 
 const USE_AI = process.env.USE_AI === 'true'
 const AI_BOTS_PER_TICK = parseInt(process.env.AI_BOTS_PER_TICK || '1', 10)
@@ -20,8 +23,12 @@ let moments: Moment[]
 export function initWorld(): void {
   worldState = createInitialWorldState()
   moments = createInitialMoments()
+  initLoops()
+  initRelationships(worldState.bots)
+  initArcs()
   console.log(`[engine] World initialized with ${Object.keys(worldState.bots).length} bots, ${Object.keys(worldState.locations).length} locations`)
   console.log(`[engine] AI mode: ${USE_AI ? `ON (${AI_BOTS_PER_TICK} bots/tick via Claude CLI)` : 'OFF (rule-based)'}`)
+  console.log(`[engine] Narrative systems: open loops + relationships + story arcs`)
 }
 
 export function tick(): void {
@@ -37,7 +44,16 @@ export function tick(): void {
 
   // Update each bot (AI-driven for selected bots, rule-based for the rest)
   const aliveBotIds = Object.keys(worldState.bots).filter(id => worldState.bots[id].status === 'alive')
-  const aiBotIds = USE_AI ? new Set(getAIBotIds(aliveBotIds, AI_BOTS_PER_TICK)) : new Set<string>()
+
+  // Priority: bots in crisis loops or climax arcs always get AI
+  const crisisBotIds = getCrisisLoopBotIds()
+  const arcPriorityBotIds = getArcPriorityBotIds()
+  const priorityBotIds = new Set(crisisBotIds.concat(arcPriorityBotIds))
+
+  // Regular round-robin for non-priority bots
+  const regularAI = USE_AI ? getAIBotIds(aliveBotIds.filter(id => !priorityBotIds.has(id)), AI_BOTS_PER_TICK) : []
+  const allAI = Array.from(priorityBotIds).concat(regularAI)
+  const aiBotIds = USE_AI ? new Set(allAI) : new Set<string>()
 
   for (const botId of aliveBotIds) {
     const bot = worldState.bots[botId]
@@ -54,6 +70,13 @@ export function tick(): void {
 
     worldState.bots[botId] = updateBot(bot, worldState, worldState.time.tick)
   }
+
+  // ── Narrative systems ─────────────────────────────────────────
+  tickRelationships(worldState.bots, worldState.time.tick)
+  detectNewLoops(worldState)
+  tickLoops(worldState)
+  detectArcs(worldState)
+  tickArcs(worldState)
 
   // Rebuild location.bots arrays from bot locations
   for (const locName of Object.keys(worldState.locations)) {
@@ -106,14 +129,21 @@ export function tick(): void {
   // Process message queue
   processMessages(worldState.bots, worldState.time.tick, moments)
 
-  // Update world narrative
-  const aliveBots = Object.values(worldState.bots).filter(b => b.status === 'alive')
-  const activeLocations = new Set(aliveBots.map(b => b.location))
-  worldState.world_narrative = `这是深圳的第${day}天，${hour}时。${aliveBots.length}个人分布在${activeLocations.size}个地点，各自忙碌着。天气${worldState.weather.current}。`
+  // Update world narrative from story arcs
+  worldState.world_narrative = generateArcNarrative(worldState)
 }
 
-export function getWorldState(): WorldState {
-  return worldState
+export function getWorldState(): WorldState & { open_loops?: any[]; relationships?: any[]; story_arcs?: any[] } {
+  return {
+    ...worldState,
+    open_loops: getOpenLoops().filter(l => l.status !== 'resolved' && l.status !== 'exploded').map(l => ({
+      id: l.id, title: l.title, type: l.type, owner_bot_id: l.owner_bot_id,
+      related_bot_ids: l.related_bot_ids, emotional_weight: Math.round(l.emotional_weight),
+      urgency: Math.round(l.urgency), status: l.status, description: l.description,
+    })),
+    relationships: getRelationshipsFlat(),
+    story_arcs: getArcsFlat(),
+  }
 }
 
 export function getMoments(): Moment[] {

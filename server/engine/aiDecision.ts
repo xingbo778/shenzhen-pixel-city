@@ -9,6 +9,9 @@
 import { execSync } from 'node:child_process'
 import type { BotState, WorldState, Moment } from './seedData.js'
 import { LOCATION_NAMES } from './seedData.js'
+import { getLoopsSummaryForPrompt } from './openLoops.js'
+import { getRelationshipSummaryForPrompt } from './relationships.js'
+import { getArcSummaryForPrompt } from './storyArcs.js'
 
 export interface BotDecision {
   move_to?: string       // location name, or null to stay
@@ -47,28 +50,47 @@ function clamp(v: number, min: number, max: number): number {
 
 function buildPrompt(bot: BotState, world: WorldState): string {
   const hour = world.time.virtual_hour
+  const day = world.time.virtual_day
   const locations = LOCATION_NAMES.join('、')
-  const otherBots = Object.values(world.bots)
-    .filter(b => b.id !== bot.id && b.status === 'alive')
-    .map(b => `${b.name}(${b.occupation ?? b.job ?? '无业'})在${b.location}`)
-    .join('；')
-
   const recentLogs = bot.action_log.slice(-3).map(l => l.plan).join('；')
 
-  return `你是深圳城市模拟中的角色"${bot.name}"。
+  // Tension-narrative sections
+  const loopsSummary = getLoopsSummaryForPrompt(bot.id)
+  const relSummary = getRelationshipSummaryForPrompt(bot.id, world.bots)
+  const arcSummary = getArcSummaryForPrompt(bot.id)
 
-基本信息：${bot.age}岁${bot.gender}，${bot.origin}人，${bot.edu}学历，职业${bot.job ?? '无业'}
-当前状态：在${bot.location}，体力${Math.round(bot.energy)}，饱腹${Math.round(bot.satiety)}，金钱¥${bot.money}
-情绪：开心${Math.round(bot.emotions.happiness)} 焦虑${Math.round(bot.emotions.anxiety)} 孤独${Math.round(bot.emotions.loneliness)} 悲伤${Math.round(bot.emotions.sadness)} 愤怒${Math.round(bot.emotions.anger)}
-人生目标：${bot.long_term_goal ?? '无'}
-最近做了：${recentLogs || '刚开始新的一天'}
+  const sections: string[] = []
+  sections.push(`你是${bot.name}，${bot.age}岁，${bot.origin}人，${bot.edu}学历。职业：${bot.job ?? '无业'}。你的人生目标：${bot.long_term_goal ?? '活下去'}。`)
+  sections.push(`现在是第${day}天${hour}时，天气${world.weather.current}。你在${bot.location}。`)
 
-现在是第${world.time.virtual_day}天${hour}时，天气${world.weather.current}。
-可选地点：${locations}
-其他人：${otherBots}
+  // Open loops — the heart of the prompt
+  if (loopsSummary) {
+    sections.push(loopsSummary)
+  }
 
-请决定${bot.name}接下来要做什么。返回纯JSON（不要markdown）：
-{"move_to":"地点名或null","activity":"一句话描述正在做什么","emotion_deltas":{"happiness":0,"sadness":0,"anger":0,"anxiety":0,"loneliness":0},"moment_content":"朋友圈内容或null","narrative":"叙事描述"}`
+  // Relationships
+  if (relSummary) {
+    sections.push(relSummary)
+  }
+
+  // Story arcs
+  if (arcSummary) {
+    sections.push(arcSummary)
+  }
+
+  // Physical state (compact)
+  sections.push(`你的状态：体力${Math.round(bot.energy)}/100，饱腹${Math.round(bot.satiety)}/100，¥${bot.money}。`)
+
+  if (recentLogs) {
+    sections.push(`最近做了：${recentLogs}`)
+  }
+
+  sections.push(`可选地点：${locations}`)
+
+  sections.push(`决定你接下来做什么。返回纯JSON（不要markdown）：
+{"move_to":"地点名或null","activity":"一句话描述正在做什么","emotion_deltas":{"happiness":0,"sadness":0,"anger":0,"anxiety":0,"loneliness":0},"moment_content":"朋友圈内容或null","narrative":"叙事描述"}`)
+
+  return sections.join('\n\n')
 }
 
 /**

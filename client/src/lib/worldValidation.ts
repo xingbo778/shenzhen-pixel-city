@@ -140,6 +140,21 @@ const worldSchema = z.object({
   })),
   generation_count: z.number(),
   graveyard: z.array(botSchema),
+  // Narrative engine (optional)
+  open_loops: z.array(z.object({
+    id: z.string(), title: z.string(), type: z.string(),
+    owner_bot_id: z.string(), related_bot_ids: z.array(z.string()),
+    emotional_weight: z.number(), urgency: z.number(),
+    status: z.string(), description: z.string(),
+  })).optional(),
+  relationships: z.array(z.object({
+    from: z.string(), to: z.string(),
+    affinity: z.number(), trust: z.number(), status: z.string(),
+  })).optional(),
+  story_arcs: z.array(z.object({
+    id: z.string(), title: z.string(), type: z.string(),
+    participants: z.array(z.string()), phase: z.string(), description: z.string(),
+  })).optional(),
 });
 
 const momentSchema = z.object({
