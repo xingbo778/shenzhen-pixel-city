@@ -15,7 +15,8 @@
     "lint": "eslint client/src server shared",
     "format": "prettier --write .",
     "textures:ktx2": "node scripts/generate-ktx2-textures.mjs",
-    "engine": "tsx server/worldEngine.ts"
+    "engine": "tsx server/worldEngine.ts",
+    "engine:ai": "USE_AI=true tsx server/worldEngine.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

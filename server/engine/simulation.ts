@@ -9,6 +9,10 @@ import { maybeUpdateWeather } from './weatherSystem.js'
 import { maybeGenerateMoment } from './momentGenerator.js'
 import { maybeGenerateNews, maybeGenerateEvent, maybeRotateHotTopics } from './newsGenerator.js'
 import { processMessages, queueMessage as queueMsg } from './messageHandler.js'
+import { getAIBotIds, getAIDecision, applyDecision } from './aiDecision.js'
+
+const USE_AI = process.env.USE_AI === 'true'
+const AI_BOTS_PER_TICK = parseInt(process.env.AI_BOTS_PER_TICK || '1', 10)
 
 let worldState: WorldState
 let moments: Moment[]
@@ -17,6 +21,7 @@ export function initWorld(): void {
   worldState = createInitialWorldState()
   moments = createInitialMoments()
   console.log(`[engine] World initialized with ${Object.keys(worldState.bots).length} bots, ${Object.keys(worldState.locations).length} locations`)
+  console.log(`[engine] AI mode: ${USE_AI ? `ON (${AI_BOTS_PER_TICK} bots/tick via Claude CLI)` : 'OFF (rule-based)'}`)
 }
 
 export function tick(): void {
@@ -30,10 +35,23 @@ export function tick(): void {
   // Update weather
   worldState.weather = maybeUpdateWeather(worldState.weather, worldState.time.tick)
 
-  // Update each bot
-  for (const botId of Object.keys(worldState.bots)) {
+  // Update each bot (AI-driven for selected bots, rule-based for the rest)
+  const aliveBotIds = Object.keys(worldState.bots).filter(id => worldState.bots[id].status === 'alive')
+  const aiBotIds = USE_AI ? new Set(getAIBotIds(aliveBotIds, AI_BOTS_PER_TICK)) : new Set<string>()
+
+  for (const botId of aliveBotIds) {
     const bot = worldState.bots[botId]
-    if (bot.status !== 'alive') continue
+
+    if (aiBotIds.has(botId)) {
+      const decision = getAIDecision(bot, worldState)
+      if (decision) {
+        applyDecision(bot, decision, worldState.time.tick, moments, worldState.bots)
+        console.log(`[ai] ${bot.name}: ${decision.activity}${decision.move_to ? ` → ${decision.move_to}` : ''}`)
+        continue
+      }
+      // AI failed, fall back to rules
+    }
+
     worldState.bots[botId] = updateBot(bot, worldState, worldState.time.tick)
   }
 

@@ -8,7 +8,8 @@ import { initWorld, tick, getWorldState, getMoments, queueMessage } from './engi
 
 const app = express()
 const PORT = parseInt(process.env.ENGINE_PORT || '8000', 10)
-const TICK_INTERVAL = parseInt(process.env.TICK_INTERVAL || '3000', 10)
+const USE_AI = process.env.USE_AI === 'true'
+const TICK_INTERVAL = parseInt(process.env.TICK_INTERVAL || (USE_AI ? '10000' : '3000'), 10)
 
 // CORS
 app.use((_req, res, next) => {
