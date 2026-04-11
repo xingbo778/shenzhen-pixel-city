@@ -149,9 +149,16 @@ function vitePluginManusDebugCollector(): Plugin {
           return;
         }
 
+        const MAX_BODY_BYTES = 1 << 20; // 1 MB
         let body = "";
         req.on("data", (chunk) => {
           body += chunk.toString();
+          if (body.length > MAX_BODY_BYTES) {
+            res.writeHead(413, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: "Payload too large" }));
+            req.destroy();
+            return;
+          }
         });
 
         req.on("end", () => {

@@ -3,6 +3,7 @@ import {
   createEntity,
   tickEntity,
   getVisibleEntityIds,
+  ANIM_FRAME_COUNT,
   type GameEntity,
 } from '@/engine/gameEntity'
 
@@ -79,6 +80,22 @@ describe('tickEntity', () => {
     expect(e.facing).toBe('right')
   })
 
+  test('updates facing to diagonal when moving diagonally', () => {
+    const e = makeEntity('a', 0, 0, 32)
+    e.path = [[0, 0], [1, 1]] // moving right+down
+    e.pathIdx = 1
+    tickEntity(e, 0.1, 32)
+    expect(e.facing).toBe('front_right')
+  })
+
+  test('updates facing to back_left when moving up-left', () => {
+    const e = makeEntity('a', 5, 5, 32)
+    e.path = [[5, 5], [4, 4]] // moving left+up
+    e.pathIdx = 1
+    tickEntity(e, 0.1, 32)
+    expect(e.facing).toBe('back_left')
+  })
+
   test('updates facing to front when moving down', () => {
     const e = makeEntity('a', 0, 0, 32)
     e.path = [
@@ -101,6 +118,20 @@ describe('tickEntity', () => {
     // Tick enough to pass FRAME_DURATION (0.14s)
     tickEntity(e, 0.15, 32)
     expect(e.animFrame).toBe(1)
+  })
+
+  test('animation frame wraps at ANIM_FRAME_COUNT', () => {
+    const e = makeEntity('a', 0, 0, 32)
+    e.path = [[0, 0], [20, 0]]
+    e.pathIdx = 1
+    // Tick enough to wrap animation
+    for (let i = 0; i < 100; i++) tickEntity(e, 0.15, 32)
+    expect(e.animFrame).toBeLessThan(ANIM_FRAME_COUNT)
+    expect(e.animFrame).toBeGreaterThanOrEqual(0)
+  })
+
+  test('ANIM_FRAME_COUNT is 4', () => {
+    expect(ANIM_FRAME_COUNT).toBe(4)
   })
 
   test('boat entity moves slower than pedestrian', () => {

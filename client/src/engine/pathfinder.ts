@@ -162,7 +162,7 @@ class MinHeap {
 
 function compareNodes(a: Node, b: Node): number {
   if (a.f !== b.f) return a.f - b.f
-  return b.g - a.g
+  return a.g - b.g
 }
 
 // ── Path cache ───────────────────────────────────────────────────
@@ -357,7 +357,10 @@ function buildChunkGraph(
     }
   }
 
-  chunkNodes.forEach(portalIds => {
+  chunkNodes.forEach((portalIds, chunk) => {
+    if (portalIds.length > 20) {
+      console.warn(`[pathfinder] chunk ${chunk} has ${portalIds.length} portals — consider splitting`)
+    }
     for (let i = 0; i < portalIds.length; i++) {
       const fromNode = nodes.get(portalIds[i])
       if (!fromNode) continue
@@ -547,6 +550,7 @@ function findPathInternal(
   }
 
   PATH_CACHE.set(cacheKey, { path: [], ts: Date.now() })
+  prunePathCache()
   return []
 }
 

@@ -413,9 +413,9 @@ function LocationDetail({
             NPC
           </div>
           <div className="flex flex-wrap gap-1">
-            {data.npcs.map((npc, i) => (
+            {data.npcs.map((npc) => (
               <Badge
-                key={i}
+                key={`${npc.name}-${npc.role}`}
                 variant="outline"
                 className="text-[10px] font-normal"
               >
@@ -452,9 +452,9 @@ function LocationDetail({
             工作岗位
           </div>
           <div className="flex flex-wrap gap-1">
-            {data.jobs.map((job, i) => (
+            {data.jobs.map((job) => (
               <Badge
-                key={i}
+                key={`${job.title}-${job.pay}`}
                 variant="outline"
                 className="text-[10px] font-normal text-green-400 border-green-400/30"
               >

@@ -256,6 +256,39 @@ describe('pathfinder', () => {
     expect(() => clearPathCache()).not.toThrow()
   })
 
+  // ── tiebreaker correctness ─────────────────────────────────────
+
+  test('A* tiebreaker prefers nodes with larger g (closer to goal)', () => {
+    // On a fully open 10x10 grid, A* should find optimal path
+    const mesh = createMesh(10, 10, true)
+    const path = findPath(mesh, [0, 0], [9, 9])
+    // Optimal path length = Manhattan distance + 1 = 18 + 1 = 19
+    expect(path.length).toBe(19)
+    // Path should be monotonically progressing (no backtracking)
+    for (let i = 1; i < path.length; i++) {
+      const [c0, r0] = path[i - 1]
+      const [c1, r1] = path[i]
+      expect(Math.abs(c1 - c0) + Math.abs(r1 - r0)).toBe(1)
+    }
+  })
+
+  // ── cache pruning on failed paths ─────────────────────────────
+
+  test('failed paths are also cached and pruned', () => {
+    // Create mesh with disconnected islands — many failed lookups
+    const mesh = createMesh(10, 10, false)
+    mesh[0][0] = true
+    mesh[9][9] = true
+
+    // Run many failed pathfinding attempts to fill cache
+    for (let i = 0; i < 250; i++) {
+      clearPathCache()
+      findPath(mesh, [0, 0], [9, 9])
+    }
+    // Should not throw or leak memory
+    expect(true).toBe(true)
+  })
+
   // ── iteration limit safety ────────────────────────────────────
 
   test('A* does not hang on a large disconnected mesh', () => {

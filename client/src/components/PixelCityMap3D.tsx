@@ -259,6 +259,9 @@ export default function PixelCityMap3D({
     }
 
     // Demo fallback: spawn wandering NPCs when no world data
+    if (world) {
+      demoSpawnedRef.current = false
+    }
     if (!world && !demoSpawnedRef.current) {
       demoSpawnedRef.current = true
       const DEMO_COUNT = 30

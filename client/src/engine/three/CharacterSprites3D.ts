@@ -348,6 +348,8 @@ export function createCharacterSprites3D(): CharacterSprites3DHandle {
   function dispose() {
     entries.forEach(entry => disposeEntry(entry))
     entries.clear()
+    texCache.forEach(tex => tex.dispose())
+    texCache.clear()
   }
 
   return { group, sync, dispose }

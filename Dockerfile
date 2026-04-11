@@ -1,9 +1,9 @@
 # Stage 1: Build
-FROM node:22-alpine AS builder
+FROM node:22.15-alpine AS builder
 WORKDIR /app
 
 # Copy package files and patches (patches needed before pnpm install)
-COPY package.json pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml ./
 COPY patches/ ./patches/
 RUN npm install -g pnpm && pnpm install --frozen-lockfile
 
@@ -30,4 +30,6 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Substitute PORT in nginx config at container start, then launch nginx
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q -O /dev/null http://localhost:${PORT}/ || exit 1
+
 CMD ["/bin/sh", "-c", "envsubst '$PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]

@@ -72,6 +72,7 @@ const texLoader = new THREE.TextureLoader()
 const texCache = new Map<string, THREE.Texture>()
 const texPromiseCache = new Map<string, Promise<THREE.Texture>>()
 const matCache = new Map<string, THREE.MeshLambertMaterial>()
+const geoCache = new Map<string, THREE.BoxGeometry>()
 const assetExistsCache = new Map<string, Promise<boolean>>()
 let ktx2Loader: KTX2Loader | null = null
 let ktx2Enabled = false
@@ -488,8 +489,10 @@ function buildTexturedBox(
 
   const obj = new THREE.Object3D()
 
-  // Main body
-  const geom = new THREE.BoxGeometry(width, height, depth)
+  // Main body (reuse geometry for similar dimensions)
+  const geoKey = `${width.toFixed(2)},${height.toFixed(2)},${depth.toFixed(2)}`
+  let geom = geoCache.get(geoKey)
+  if (!geom) { geom = new THREE.BoxGeometry(width, height, depth); geoCache.set(geoKey, geom) }
   const mesh = new THREE.Mesh(geom, materials)
   mesh.castShadow = false
   mesh.receiveShadow = false
@@ -609,7 +612,11 @@ export async function buildBuildings3D(
       m.dispose()
     })
     matCache.clear()
+    texCache.forEach(tex => tex.dispose())
     texCache.clear()
+    texPromiseCache.clear()
+    geoCache.forEach(g => g.dispose())
+    geoCache.clear()
   }
 
   return { group, updateLOD, dispose }

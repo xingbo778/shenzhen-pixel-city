@@ -10,6 +10,14 @@ async function startServer() {
   const app = express()
   const server = createServer(app)
 
+  // CORS headers
+  app.use((_req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    next()
+  })
+
   // Serve static files from dist/public in production
   const staticPath =
     process.env.NODE_ENV === 'production'

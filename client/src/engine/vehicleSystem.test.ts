@@ -152,6 +152,16 @@ describe('tickVehicles', () => {
     expect(v.x).toBeLessThan(0.99)
   })
 
+  test('wrap preserves fractional remainder (no position jump)', () => {
+    const lane: VehicleLane = { type: 'taxi', y: 0.5, xMin: 0, xMax: 1, dir: 1 }
+    const v = createLanedVehicle('wrap', 0.98, lane)
+    // Tick to wrap past xMax
+    tickVehicles([v], 10, new Set(['wrap']))
+    // After wrap, x should be within lane bounds
+    expect(v.x).toBeGreaterThanOrEqual(lane.xMin)
+    expect(v.x).toBeLessThanOrEqual(lane.xMax)
+  })
+
   test('handles empty vehicle array', () => {
     expect(() => tickVehicles([], 0.1, new Set())).not.toThrow()
   })

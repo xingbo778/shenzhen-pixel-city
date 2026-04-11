@@ -34,6 +34,7 @@ export interface EntityViewport {
 const WALK_SPEED = 2.8       // tiles per second
 const FRAME_DURATION = 0.14  // seconds per animation frame
 const BOAT_SPEED = 1.4
+export const ANIM_FRAME_COUNT = 4
 
 /**
  * Advance entity position along its path with sub-tile interpolation.
@@ -62,30 +63,30 @@ export function tickEntity(entity: GameEntity, dt: number, tileSize: number): vo
     entity.pixelY += (dy / dist) * step
   }
 
-  // Update facing direction (8-way)
-  const adx = Math.abs(dx)
-  const ady = Math.abs(dy)
-  if (adx > 0.5 || ady > 0.5) {
-    const goRight = dx > 0
-    const goDown  = dy > 0
-    if (adx > ady * 2) {
-      entity.facing = goRight ? 'right' : 'left'
-    } else if (ady > adx * 2) {
-      entity.facing = goDown ? 'front' : 'back'
-    } else {
-      if (goRight) {
-        entity.facing = goDown ? 'front_right' : 'back_right'
-      } else {
-        entity.facing = goDown ? 'front_left' : 'back_left'
-      }
+  // Update facing direction (8-way via atan2)
+  if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+    const angle = Math.atan2(dy, dx) // radians, 0 = right, PI/2 = down
+    // Divide into 8 sectors of 45 degrees each
+    const sector = Math.round(angle / (Math.PI / 4)) // -4 to 4
+    const FACING_MAP: Record<number, Facing> = {
+      0: 'right',
+      1: 'front_right',
+      2: 'front',
+      3: 'front_left',
+      4: 'left',
+      '-4': 'left',
+      '-3': 'back_left',
+      '-2': 'back',
+      '-1': 'back_right',
     }
+    entity.facing = FACING_MAP[sector] ?? entity.facing
   }
 
   // Advance animation frame
   entity.frameTimer += dt
   if (entity.frameTimer >= FRAME_DURATION) {
     entity.frameTimer -= FRAME_DURATION
-    entity.animFrame = (entity.animFrame + 1) % 6
+    entity.animFrame = (entity.animFrame + 1) % ANIM_FRAME_COUNT
   }
 }
 

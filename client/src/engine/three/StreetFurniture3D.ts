@@ -387,6 +387,20 @@ export async function buildStreetFurniture3D(objects: SceneObject[]): Promise<St
 
 /** Clear cached GLB models to free memory between scenes. */
 export function clearFurnitureCache(): void {
+  glbCache.forEach(model => {
+    if (model) {
+      model.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose()
+          const mats = Array.isArray(child.material) ? child.material : [child.material]
+          mats.forEach(m => {
+            if (m.map) m.map.dispose()
+            m.dispose()
+          })
+        }
+      })
+    }
+  })
   glbCache.clear()
   glbLoading.clear()
 }

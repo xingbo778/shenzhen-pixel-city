@@ -176,9 +176,9 @@ export default function Home() {
 
   // Lazy-load Bot cards
   const [visibleBotIds, setVisibleBotIds] = useState<Set<string>>(new Set());
-  const botCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  useEffect(() => {
-    const obs = new IntersectionObserver(
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  if (observerRef.current == null) {
+    observerRef.current = new IntersectionObserver(
       (entries) => {
         setVisibleBotIds(prev => {
           const next = new Set(prev);
@@ -191,9 +191,10 @@ export default function Home() {
       },
       { threshold: 0.01 }
     );
-    Object.entries(botCardRefs.current).forEach(([, el]) => { if (el) obs.observe(el); });
-    return () => obs.disconnect();
-  }, [aliveBots]);
+  }
+  const botCardRef = useCallback((el: HTMLDivElement | null) => {
+    if (el && observerRef.current) observerRef.current.observe(el);
+  }, []);
 
   return (
     <div className="h-screen bg-background overflow-hidden flex flex-col">
@@ -354,7 +355,7 @@ export default function Home() {
                   key={botId}
                   data-botid={botId}
                   data-testid={`bot-card-shell-${botId}`}
-                  ref={el => { botCardRefs.current[botId] = el; }}
+                  ref={botCardRef}
                   style={{ minHeight: 80 }}
                 >
                   {(visibleBotIds.has(botId) || selectedBotId === botId) ? (

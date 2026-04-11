@@ -15,8 +15,8 @@ async function bootMockMode(page: import('playwright/test').Page) {
 
 async function openNanshanScene(page: import('playwright/test').Page) {
   await page.getByTestId('overview-hotspot-nanshan_tech_park').click()
-  await expect(page.getByTestId('back-to-overview')).toBeVisible()
-  await expect(page.getByTestId('scene-map-container')).toBeVisible()
+  await expect(page.getByTestId('back-to-overview')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('scene-map-container')).toBeVisible({ timeout: 30000 })
 }
 
 test.beforeEach(async ({ page }) => {

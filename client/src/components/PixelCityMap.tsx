@@ -524,6 +524,16 @@ export default function PixelCityMap({
       ([botId]) => activeEntityIds.has(botId)
     )
 
+    // Build spatial grid for O(n) collision detection
+    const spatialGrid = new Map<string, [string, GameEntity][]>()
+    const collCellSize = tileSize * 2
+    activeEntities.forEach(([id, ent]) => {
+      const gk = `${Math.floor(ent.pixelX / collCellSize)},${Math.floor(ent.pixelY / collCellSize)}`
+      let cell = spatialGrid.get(gk)
+      if (!cell) { cell = []; spatialGrid.set(gk, cell) }
+      cell.push([id, ent])
+    })
+
     Object.entries(entitiesRef.current).forEach(([botId, entity], i) => {
       const isActive = activeEntityIds.has(botId)
       const shouldTick = isActive || (tick + i) % 4 === 0
@@ -555,18 +565,29 @@ export default function PixelCityMap({
         }
       }
 
-      activeEntities.forEach(([otherId, other]) => {
-        if (otherId === botId) return
-        const edx = entity.pixelX - other.pixelX
-        const edy = entity.pixelY - other.pixelY
-        const dist = Math.sqrt(edx * edx + edy * edy)
-        const minD = tileSize * 0.7
-        if (dist < minD && dist > 0.1) {
-          const push = (minD - dist) * 0.15
-          entity.pixelX += (edx / dist) * push
-          entity.pixelY += (edy / dist) * push
+      // Entity-entity collision (spatial hash for O(n) average)
+      const cellSize = tileSize * 2
+      const cx = Math.floor(entity.pixelX / cellSize)
+      const cy = Math.floor(entity.pixelY / cellSize)
+      for (let dx2 = -1; dx2 <= 1; dx2++) {
+        for (let dy2 = -1; dy2 <= 1; dy2++) {
+          const cellKey = `${cx + dx2},${cy + dy2}`
+          const cell = spatialGrid.get(cellKey)
+          if (!cell) continue
+          for (const [otherId, other] of cell) {
+            if (otherId === botId) continue
+            const edx = entity.pixelX - other.pixelX
+            const edy = entity.pixelY - other.pixelY
+            const dist = Math.sqrt(edx * edx + edy * edy)
+            const minD = tileSize * 0.7
+            if (dist < minD && dist > 0.1) {
+              const push = (minD - dist) * 0.15
+              entity.pixelX += (edx / dist) * push
+              entity.pixelY += (edy / dist) * push
+            }
+          }
         }
-      })
+      }
 
       collectBotDrawables(
         botId,
