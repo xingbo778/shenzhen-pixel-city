@@ -131,13 +131,13 @@ function applyExplosion(loop: OpenLoop, world: WorldState): void {
 
 export function detectNewLoops(world: WorldState): void {
   const tick = world.time.tick
-  const existingKeys = new Set(loops.filter(l => l.status !== 'resolved' && l.status !== 'exploded').map(l => `${l.owner_bot_id}:${l.type}:${l.title.slice(0, 20)}`))
+  const existingKeys = new Set(loops.filter(l => l.status !== 'resolved' && l.status !== 'exploded').map(l => `${l.owner_bot_id}:${l.type}`))
 
   for (const bot of Object.values(world.bots)) {
     if (bot.status !== 'alive') continue
 
-    // Financial threat
-    if (bot.money < 500 && bot.job !== null && !existingKeys.has(`${bot.id}:threat:工资不够花`)) {
+    // Financial threat (only one threat loop per bot)
+    if (bot.money < 500 && bot.job !== null && !existingKeys.has(`${bot.id}:threat`)) {
       addLoop({
         title: '工资不够花，下个月房租怎么办',
         type: 'threat',
@@ -154,7 +154,7 @@ export function detectNewLoops(world: WorldState): void {
     }
 
     // Broke and jobless
-    if (bot.money < 200 && bot.job === null && !existingKeys.has(`${bot.id}:threat:身上快没钱了`)) {
+    if (bot.money < 200 && bot.job === null && !existingKeys.has(`${bot.id}:threat`)) {
       addLoop({
         title: '身上快没钱了',
         type: 'threat',
@@ -171,7 +171,7 @@ export function detectNewLoops(world: WorldState): void {
     }
 
     // Loneliness building up
-    if (bot.emotions.loneliness > 65 && !existingKeys.has(`${bot.id}:crush:越来越孤独`)) {
+    if (bot.emotions.loneliness > 65 && !existingKeys.has(`${bot.id}:crush`)) {
       const otherBots = Object.values(world.bots).filter(b =>
         b.id !== bot.id && b.status === 'alive' && b.location === bot.location
       )
@@ -194,7 +194,7 @@ export function detectNewLoops(world: WorldState): void {
     }
 
     // Health crisis
-    if (bot.energy < 20 && bot.hp < 50 && !existingKeys.has(`${bot.id}:threat:身体快撑不住了`)) {
+    if (bot.energy < 20 && bot.hp < 50 && !existingKeys.has(`${bot.id}:threat`)) {
       addLoop({
         title: '身体快撑不住了',
         type: 'threat',
@@ -211,7 +211,7 @@ export function detectNewLoops(world: WorldState): void {
     }
 
     // Shame from low reputation
-    if (bot.reputation.score < 0 && !existingKeys.has(`${bot.id}:shame:名声受损`)) {
+    if (bot.reputation.score < 0 && !existingKeys.has(`${bot.id}:shame`)) {
       addLoop({
         title: '名声受损，别人怎么看我',
         type: 'shame',

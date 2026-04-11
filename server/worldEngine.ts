@@ -57,6 +57,18 @@ app.post('/admin/send_message', (req, res) => {
   res.json({ ok: true })
 })
 
+// POST /admin/set_bot — debug: directly mutate bot state
+app.post('/admin/set_bot', (req, res) => {
+  const { bot_id, ...fields } = req.body || {}
+  if (!bot_id) { res.status(400).json({ error: 'Missing bot_id' }); return }
+  const world = getWorldState()
+  const bot = world.bots[bot_id]
+  if (!bot) { res.status(404).json({ error: `Bot ${bot_id} not found` }); return }
+  Object.assign(bot, fields)
+  console.log(`[engine] DEBUG set_bot ${bot_id}:`, JSON.stringify(fields).slice(0, 200))
+  res.json({ ok: true, bot })
+})
+
 // Initialize and start
 initWorld()
 
