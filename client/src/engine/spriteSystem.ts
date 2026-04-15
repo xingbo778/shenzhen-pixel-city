@@ -13,11 +13,18 @@ export type SpriteData = string[][]
 
 const zoomCaches = new Map<number, WeakMap<SpriteData, HTMLCanvasElement>>()
 
+const MAX_ZOOM_CACHE_SIZE = 20
+
 export function getCachedSprite(sprite: SpriteData, zoom: number): HTMLCanvasElement {
-  let cache = zoomCaches.get(zoom)
+  const quantized = Math.round(zoom * 2) / 2
+  let cache = zoomCaches.get(quantized)
   if (!cache) {
+    if (zoomCaches.size >= MAX_ZOOM_CACHE_SIZE) {
+      const oldest = zoomCaches.keys().next().value
+      if (oldest !== undefined) zoomCaches.delete(oldest)
+    }
     cache = new WeakMap()
-    zoomCaches.set(zoom, cache)
+    zoomCaches.set(quantized, cache)
   }
   const cached = cache.get(sprite)
   if (cached) return cached
@@ -95,8 +102,8 @@ const H = 'hair', K = 'skin', S = 'shirt', P = 'pants', O = 'shoes', E = '#FFFFF
 const A = 'accent1', B = 'accent2' // accent colors for occupation-specific details
 type TC = typeof H | typeof K | typeof S | typeof P | typeof O | typeof E | typeof A | typeof B | typeof _
 
-function resolveTemplate(template: TC[][], palette: CharPalette): SpriteData {
-  const opal = palette as OccupationPalette
+function resolveTemplate(template: TC[][], palette: CharPalette | OccupationPalette): SpriteData {
+  const opal = 'accent1' in palette ? palette : null
   return template.map(row => row.map(cell => {
     if (cell === _) return ''
     if (cell === E) return E
@@ -105,8 +112,8 @@ function resolveTemplate(template: TC[][], palette: CharPalette): SpriteData {
     if (cell === S) return palette.shirt
     if (cell === P) return palette.pants
     if (cell === O) return palette.shoes
-    if (cell === A) return opal.accent1 ?? palette.shirt
-    if (cell === B) return opal.accent2 ?? palette.hair
+    if (cell === A) return opal?.accent1 ?? palette.shirt
+    if (cell === B) return opal?.accent2 ?? palette.hair
     return cell
   }))
 }

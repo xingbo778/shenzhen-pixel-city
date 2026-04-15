@@ -139,42 +139,55 @@ async function preloadAllGLBs(): Promise<void> {
 
 // ── Procedural fallback meshes ───────────────────────────────────────
 
+// Shared geometry/material caches to minimize GPU allocations
+const procMatCache = new Map<number, THREE.MeshLambertMaterial>()
 function mat(color: number): THREE.MeshLambertMaterial {
-  return new THREE.MeshLambertMaterial({ color })
+  let m = procMatCache.get(color)
+  if (!m) { m = new THREE.MeshLambertMaterial({ color }); procMatCache.set(color, m) }
+  return m
 }
+
+// Shared geometries for procedural vehicles
+const CAR_WHEEL_GEO = new THREE.CylinderGeometry(0.10, 0.10, 0.06, 8)
+const SUV_WHEEL_GEO = new THREE.CylinderGeometry(0.12, 0.12, 0.07, 8)
+const CAR_BODY_GEO = new THREE.BoxGeometry(0.65, 0.40, 1.6)
+const CAR_CABIN_GEO = new THREE.BoxGeometry(0.65 * 0.78, 0.40 * 0.55, 1.6 * 0.40)
+const SUV_BODY_GEO = new THREE.BoxGeometry(0.70, 0.50, 1.8)
+const SUV_CABIN_GEO = new THREE.BoxGeometry(0.70 * 0.82, 0.50 * 0.6, 1.8 * 0.48)
+const GLASS_MAT = new THREE.MeshLambertMaterial({ color: 0x334455, transparent: true, opacity: 0.7 })
+const HL_GEO_CAR = new THREE.BoxGeometry(0.08, 0.05, 0.03)
+const TL_GEO_CAR = new THREE.BoxGeometry(0.07, 0.05, 0.03)
+const HL_GEO_SUV = new THREE.BoxGeometry(0.10, 0.06, 0.03)
+const TL_GEO_SUV = new THREE.BoxGeometry(0.08, 0.06, 0.03)
 
 function buildProceduralCar(bodyColor: number): THREE.Object3D {
   const g = new THREE.Object3D()
   const w = 0.65, h = 0.40, d = 1.6
   const base = 0.12
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(bodyColor))
+  const body = new THREE.Mesh(CAR_BODY_GEO, mat(bodyColor))
   body.position.y = h / 2 + base
   g.add(body)
 
   const cabH = h * 0.55
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(w * 0.78, cabH, d * 0.40),
-    new THREE.MeshLambertMaterial({ color: 0x334455, transparent: true, opacity: 0.7 }),
-  )
+  const cabin = new THREE.Mesh(CAR_CABIN_GEO, GLASS_MAT)
   cabin.position.y = h + cabH / 2 + base
   cabin.position.z = -d * 0.04
   g.add(cabin)
 
-  const wheelGeo = new THREE.CylinderGeometry(0.10, 0.10, 0.06, 8)
   const wmat = mat(0x222222)
   for (const [px, pz] of [[-w/2-0.02, -d*0.32], [w/2+0.02, -d*0.32], [-w/2-0.02, d*0.32], [w/2+0.02, d*0.32]]) {
-    const wheel = new THREE.Mesh(wheelGeo, wmat)
+    const wheel = new THREE.Mesh(CAR_WHEEL_GEO, wmat)
     wheel.rotation.z = Math.PI / 2
     wheel.position.set(px, 0.10, pz)
     g.add(wheel)
   }
 
   for (const side of [-1, 1]) {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.03), mat(0xFFFFDD))
+    const hl = new THREE.Mesh(HL_GEO_CAR, mat(0xFFFFDD))
     hl.position.set(side * w * 0.3, h * 0.4 + base, d / 2 + 0.02)
     g.add(hl)
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.03), mat(0xFF2222))
+    const tl = new THREE.Mesh(TL_GEO_CAR, mat(0xFF2222))
     tl.position.set(side * w * 0.3, h * 0.4 + base, -d / 2 - 0.02)
     g.add(tl)
   }
@@ -187,39 +200,36 @@ function buildProceduralSUV(bodyColor: number): THREE.Object3D {
   const w = 0.70, h = 0.50, d = 1.8
   const base = 0.14
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(bodyColor))
+  const body = new THREE.Mesh(SUV_BODY_GEO, mat(bodyColor))
   body.position.y = h / 2 + base
   g.add(body)
 
   const cabH = h * 0.6
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(w * 0.82, cabH, d * 0.48),
-    new THREE.MeshLambertMaterial({ color: 0x334455, transparent: true, opacity: 0.7 }),
-  )
+  const cabin = new THREE.Mesh(SUV_CABIN_GEO, GLASS_MAT)
   cabin.position.y = h + cabH / 2 + base
   cabin.position.z = -d * 0.03
   g.add(cabin)
 
+  const RAIL_GEO = new THREE.BoxGeometry(0.03, 0.03, d * 0.35)
   for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, d * 0.35), mat(0xCCCCCC))
+    const rail = new THREE.Mesh(RAIL_GEO, mat(0xCCCCCC))
     rail.position.set(side * w * 0.38, h + cabH + base + 0.01, -d * 0.03)
     g.add(rail)
   }
 
-  const wheelGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.07, 8)
   const wmat = mat(0x222222)
   for (const [px, pz] of [[-w/2-0.02, -d*0.32], [w/2+0.02, -d*0.32], [-w/2-0.02, d*0.32], [w/2+0.02, d*0.32]]) {
-    const wheel = new THREE.Mesh(wheelGeo, wmat)
+    const wheel = new THREE.Mesh(SUV_WHEEL_GEO, wmat)
     wheel.rotation.z = Math.PI / 2
     wheel.position.set(px, 0.12, pz)
     g.add(wheel)
   }
 
   for (const side of [-1, 1]) {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, 0.03), mat(0xFFFFDD))
+    const hl = new THREE.Mesh(HL_GEO_SUV, mat(0xFFFFDD))
     hl.position.set(side * w * 0.28, h * 0.4 + base, d / 2 + 0.02)
     g.add(hl)
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.03), mat(0xFF2222))
+    const tl = new THREE.Mesh(TL_GEO_SUV, mat(0xFF2222))
     tl.position.set(side * w * 0.28, h * 0.4 + base, -d / 2 - 0.02)
     g.add(tl)
   }
@@ -374,5 +384,17 @@ export async function buildVehicles3D(
 
 /** Clear cached GLB models to free memory between scenes. */
 export function clearVehicleCache(): void {
+  glbCache.forEach(entry => {
+    entry.model.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose()
+        const mats = Array.isArray(child.material) ? child.material : [child.material]
+        mats.forEach(m => {
+          if (m.map) m.map.dispose()
+          m.dispose()
+        })
+      }
+    })
+  })
   glbCache.clear()
 }

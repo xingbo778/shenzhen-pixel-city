@@ -120,7 +120,7 @@ function initVehiclesFromLanes(
     const count = 3 + Math.min(extraPerLane, 4)
     for (let i = 0; i < count; i++) {
       const spread = lane.xMax - lane.xMin
-      const x = lane.xMin + (i / count) * spread + Math.random() * (spread / count) * 0.5
+      const x = lane.xMin + ((i + 0.5) / count) * spread + (Math.random() - 0.5) * (spread / count) * 0.5
       vehicles.push({
         id: `v_${location}_${laneIdx}_${i}`,
         type: lane.type, lane,
@@ -384,6 +384,10 @@ function advanceVehicle(v: VehicleState, dt: number, animate: boolean): void {
   }
 
   v.x += v.dir * config.speed * dt
-  if (v.dir === 1 && v.x > v.lane.xMax + 0.05) v.x = v.lane.xMin - 0.05
-  if (v.dir === -1 && v.x < v.lane.xMin - 0.05) v.x = v.lane.xMax + 0.05
+  if (v.dir === 1 && v.x > v.lane.xMax) {
+    v.x = v.lane.xMin + (v.x - v.lane.xMax)
+  }
+  if (v.dir === -1 && v.x < v.lane.xMin) {
+    v.x = v.lane.xMax - (v.lane.xMin - v.x)
+  }
 }

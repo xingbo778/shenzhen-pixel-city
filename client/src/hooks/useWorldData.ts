@@ -4,7 +4,8 @@ import { MOCK_WORLD, MOCK_MOMENTS } from "@/lib/mockData";
 import { parseMomentsPayload, parseWorldPayload } from "@/lib/worldValidation";
 
 // 全局 engineUrl，支持运行时动态修改
-let _engineUrl = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
+const _rawEnvUrl = (import.meta.env.VITE_ENGINE_URL as string) || "http://localhost:8000";
+let _engineUrl = normalizeEngineUrl(_rawEnvUrl) ?? "http://localhost:8000";
 
 export function normalizeEngineUrl(url: string): string | null {
   try {
